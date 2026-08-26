@@ -53,8 +53,12 @@ const
   RayDashes = 14
   FxSpriteBase = 470
   FxObjectBase = 1000
-  TextSpriteBase = 2000        ## rotating pool for baked strings
-  TextSpritePool = 64
+  TextSpriteBase* = 2000       ## rotating pool for baked strings
+  TextSpritePool* = 64
+    ## Exported so the text gates can tell a BAKED STRING from a wall: the
+    ## board draws every label as a sprite, so `tools/ci/worst_case_frame.nim`
+    ## and the renderer fixture find the drawn text by this id range rather
+    ## than by guessing at labels.
   ChipObjectBase = 1100
   BubbleObjectBase = 1200
   ScoreObjectBase = 1300

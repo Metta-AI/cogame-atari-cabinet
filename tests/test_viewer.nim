@@ -195,12 +195,31 @@ suite "viewer":
     # …which is exactly why #viewpanel is gone: the board always fits.
     check "the arena is FIXED" in page
 
-  test "the renderer fixture exercises the bubble band at full cap":
+  test "the renderer fixture DRIVES the shipped renderer at full cap":
+    # It is not enough for a fixture to exist: cogchemists' bubbles shipped
+    # clipped behind a green board because the only page that drew model text
+    # re-implemented the layout instead of executing the shipped one. This
+    # fixture loads the bundle's OWN broadcast_core.js, feeds it the packet
+    # src/cabinet/global.nim baked, and lays the 160-rune note out with the
+    # real chrome CSS from the bundle's own index.html.
     let fixture = sourceText("tools/ci/renderer_fixture.html")
-    check "MAX_SAY_RUNES = 48" in fixture
-    check "MAX_NOTE_RUNES = 160" in fixture
-    check "[360, 620, 1280].forEach(drawCase)" in fixture
+    check "src=\"./broadcast_core.js\"" in fixture
+    check "src=\"./wire_constants.js\"" in fixture
+    check "window.BroadcastCore.create(" in fixture
+    check "board_packet.bin" in fixture
+    check "fixture_meta.json" in fixture
+    check "fetchText('./index.html')" in fixture
+    check "cab-note-row" in fixture
+    check "[360, 620, 1280]" in fixture
     check "data-replay-loaded" in fixture
     check "data-replay-error" in fixture
-    check "BUBBLE_BAND_LO_CU = 92" in fixture
-    check "renderer_fixture.html" in sourceText(".github/workflows/ci.yml")
+    # NOTHING is shortened. A remark is a sentence, and item 15 makes
+    # ellipsizing one a defect: there is no ellipsis and no measure-and-cut
+    # loop anywhere in the page.
+    check "\u2026" notin fixture
+    check "text.length - 2" notin fixture
+    let ci = sourceText(".github/workflows/ci.yml")
+    check "renderer_fixture.html" in ci
+    check "gen_render_fixture.nim" in ci
+    check "render-fixture" in ci
+

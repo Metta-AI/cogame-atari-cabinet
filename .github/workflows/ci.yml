@@ -149,6 +149,32 @@ jobs:
           done
           exit "${fail}"
 
+      # -----------------------------------------------------------------
+      # THE WORST-CASE TEXT FRAME. docker_smoke.sh runs with no
+      # ANTHROPIC_API_KEY, so every seat plays scripted and no replay CI can
+      # produce carries model text. This bakes the frame that does: a real
+      # playing arena whose four seats have each just returned a full-cap
+      # 48-rune `say` and 160-rune `note`, rendered by src/cabinet/global.nim's
+      # own board builder into a real Sprite v1 packet. wasm-viewer hands those
+      # bytes to the SHIPPED renderer in a real browser
+      # (tools/ci/renderer_fixture.html), which is the only gate that draws
+      # model text at all (cogchemists, 2026-08-24).
+      # -----------------------------------------------------------------
+      - name: Bake the worst-case text frame
+        run: |
+          set -euo pipefail
+          nim r --hints:off -d:release --path:src \
+            tools/ci/gen_render_fixture.nim "$PWD/dist/render-fixture"
+          ls -la dist/render-fixture
+
+      - name: Upload the worst-case text frame
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-fixture
+          path: dist/render-fixture
+          if-no-files-found: error
+          retention-days: 14
+
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs
   # end to end in raw docker with the certification fixture's seat mix.
@@ -213,8 +239,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # The bundle is EXECUTED here, not merely built, and it is executed against
-    # the replay docker-smoke just produced -- hence the dependency.
-    needs: docker-smoke
+    # the replay docker-smoke just produced -- hence the dependency. `test`
+    # comes along because it bakes the worst-case text frame the renderer
+    # fixture renders.
+    needs: [test, docker-smoke]
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
@@ -285,6 +313,12 @@ jobs:
           name: smoke-replay
           path: dist/smoke
 
+      - name: Download the worst-case text frame
+        uses: actions/download-artifact@v4
+        with:
+          name: render-fixture
+          path: dist/render-fixture
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -326,11 +360,20 @@ jobs:
       # THE WORST-CASE RENDERER FIXTURE. docker_smoke.sh runs with no
       # ANTHROPIC_API_KEY, so every seat plays scripted and the smoke replay
       # carries only the baselines' fixed `say` strings: nothing in CI would
-      # otherwise exercise the bubble band, the aim rays or the feed AT FULL
-      # CAP. The fixture loads the real chrome with a full-cap 48-rune `say`
-      # and 160-rune `note` on ALL FOUR seats at once, all four aim rays live,
-      # at 360, 620 and 1280 px, and self-checks its own string lengths
-      # (cogchemists, 2026-08-24).
+      # otherwise exercise the bubble band, the stance chips or the feed AT
+      # FULL CAP, and the shipped board composites in a Worker, so the smoke
+      # above reports `canvas text: 0 drawn` -- which is not evidence of
+      # anything (cogchemists, 2026-08-24).
+      #
+      # The fixture is NOT a second implementation of the board. It loads the
+      # bundle's own broadcast_core.js and wire_constants.js, hands them the
+      # packet src/cabinet/global.nim baked for a four-seat full-cap frame
+      # (the `render-fixture` artifact from the test job), lays the 160-rune
+      # note out with the real chrome CSS from the bundle's own index.html,
+      # and transcribes every string the shipped path drew -- baked sprite and
+      # DOM line box alike -- onto the canvas at its measured geometry, so
+      # `canvas_text` covers the model text the shipped viewer draws. It
+      # shortens nothing: a remark that does not fit fails the job.
       # -----------------------------------------------------------------
       - name: Render the worst-case text fixture at 360 / 620 / 1280 px
         run: |
@@ -342,11 +385,20 @@ jobs:
             echo "::error::with no ANTHROPIC_API_KEY, so every CI replay carries"
             echo "::error::almost no LLM text (cogchemists, 2026-08-24)."
             exit 1; }
+          test -s dist/render-fixture/board_packet.bin || {
+            echo "::error::dist/render-fixture/board_packet.bin is missing:"
+            echo "::error::the test job's 'Bake the worst-case text frame' step"
+            echo "::error::produces it, and without it the fixture has no"
+            echo "::error::shipped frame to render."
+            exit 1; }
           cp tools/ci/renderer_fixture.html dist/static-replay-viewer/
+          cp dist/render-fixture/board_packet.bin \
+             dist/render-fixture/fixture_meta.json \
+             dist/static-replay-viewer/
           # viewer_smoke.mjs is copied VERBATIM and takes no --page flag, so
-          # the fixture is served and opened through --url. It draws all three
-          # widths (360 / 620 / 1280) itself, on the MAIN thread — the shipped
-          # board composites in a Worker, which the fillText probe cannot see.
+          # the fixture is served out of the BUNDLE directory and opened
+          # through --url: every script it loads is the file the platform will
+          # serve.
           python3 -m http.server 8099 --directory dist/static-replay-viewer \
             >/tmp/fixture-server.log 2>&1 &
           server=$!

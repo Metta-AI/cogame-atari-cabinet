@@ -10,211 +10,445 @@
   every CI episode plays the scripted baseline, and a scripted baseline emits
   only its five short fixed `say` strings. Every replay CI produces therefore
   carries almost no LLM text — which means nothing that plays a replay can
-  exercise the chrome that shows it: the speech-bubble band, the stance chips,
-  the aim-ray legend and the match feed at FULL CAP (cogchemists, 2026-08-24).
+  exercise the chrome that shows it: the speech-bubble band, the stance chips
+  and the match feed at FULL CAP (cogchemists, 2026-08-24).
 
-  So this page draws that worst case directly, on the MAIN THREAD (the shipped
-  board composites inside a Worker on an OffscreenCanvas, which
-  viewer_smoke.mjs's fillText probe cannot see at all), at the three widths
-  that matter: the 360 px featured-match iframe, the 620 px `.tiny`
-  threshold, and a 1280 px desktop stage. It uses the SAME layout rules the
-  board uses:
+  WHAT IT DRAWS, AND WHOSE CODE DRAWS IT.
 
-    * bubbles live in a RESERVED BAND across the top of the board
-      (Y in [92, 99] cu -> the top 8 % of the board in screen space), are
-      centred, and are clamped inside the board on both axes — never
-      positioned relative to a paddle, which is how text ends up drawn at a
-      negative coordinate and silently clipped to a sliver;
-    * stance chips sit beside their own bar and are clamped inside the board;
-    * the ROM caption sits in the bottom-left margin.
+  Nothing here re-implements a layout. The frame is the SHIPPED frame:
 
-  It self-checks its own string lengths first (48 runes of `say`, 160 runes of
-  `note`, on all four seats at once) and reports through the same two
-  attributes the shipped shell uses, so viewer_smoke.mjs gates it unchanged:
-  data-replay-loaded="true" on success, data-replay-error="<message>" on
-  failure.
+    * tools/ci/gen_render_fixture.nim runs src/cabinet/global.nim's own board
+      builder over a real, playing SimServer whose four seats have each just
+      returned a worst-case model reply — a full-cap 48-rune `say` and a
+      full-cap 160-rune `note`, through the real parse/record/apply path — and
+      writes the resulting Sprite v1 packet to board_packet.bin;
+    * this page hands those bytes to the REAL renderer, client/broadcast_core.js
+      (the very file the bundle ships and the replay Worker imports), on a real
+      canvas at 360 / 620 / 1280 px;
+    * the board's text is BAKED INTO SPRITES server-side with pixie, so
+      viewer_smoke.mjs's fillText probe cannot see it. Every baked string is
+      therefore TRANSCRIBED to the canvas at the rectangle the packet places it
+      at, in the board's own font (data/font.ttf), so `canvas_text` covers the
+      shipped board's model text instead of covering nothing;
+    * the 160-rune `note` lives in the chrome's match feed, not on the board, so
+      it is laid out by the REAL chrome CSS (extracted from the bundle's own
+      index.html) in the real `#stage > #chrome > #killfeed` element chain, and
+      each DOM line box is transcribed to the canvas at its measured geometry.
+
+  NOTHING IS SHORTENED. A remark is a SENTENCE, and prompts/30-review-loop.md
+  item 15 makes ellipsizing one a defect: if a string does not fit, the band is
+  too small and the band is what changes. This page has no truncation path at
+  all — it asserts the strings it drew are still at their cap and fails loudly
+  when they are not, and it fails when a drawn string leaves the board or the
+  stage.
+
+  Reported through the same two attributes the shipped shell uses, so
+  viewer_smoke.mjs gates it unchanged: data-replay-loaded="true" on success,
+  data-replay-error="<message>" on failure.
 -->
 <style>
-  html, body { margin: 0; background: #0b0704; color: #f2e8d8;
-    font-family: ui-monospace, Menlo, monospace; }
-  .case { padding: 8px 10px 14px; }
-  .case h2 { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: #e8a33d; margin: 6px 0; }
-  canvas { display: block; background: #06080a; image-rendering: pixelated; }
+  /* The real chrome's stylesheet is fetched from the bundle's index.html and
+     injected at boot; only the fixture's own scaffolding lives here. */
+  #cabfx-log {
+    position: fixed; right: 0; top: 0; z-index: 99;
+    font: 11px/1.5 ui-monospace, Menlo, monospace;
+    color: #f2e8d8; background: rgba(12, 9, 6, 0.82); padding: 6px 8px;
+    max-width: 46ch; white-space: pre-wrap; pointer-events: none;
+  }
 </style>
 </head>
 <body>
-<div id="cases"></div>
+<div id="viewport">
+  <div id="stage">
+    <canvas id="board"></canvas>
+    <div id="chrome">
+      <div id="killfeed"></div>
+    </div>
+  </div>
+</div>
+<pre id="cabfx-log"></pre>
+<script src="./wire_constants.js"></script>
+<script src="./broadcast_core.js"></script>
 <script>
 (function () {
   'use strict';
 
-  // ---- the four seats, at the server's own caps --------------------------
-  var MAX_SAY_RUNES = 48;
-  var MAX_NOTE_RUNES = 160;
-  var TEAMS = ['red', 'blue', 'green', 'yellow'];
-  var ALIASES = ['RED', 'BLUE', 'GREEN', 'YELLOW'];
-  var TINT = {
-    red: '#e0523a', blue: '#3f7cc4', green: '#45a85e', yellow: '#ddc531'
-  };
+  var WIDTHS = [360, 620, 1280];
+  var log = [];
 
-  function runes(text) { return Array.from(text).length; }
-  function padRunes(text, target) {
-    var out = Array.from(text);
-    var filler = Array.from('· aim at the wounded cabinet and keep the middle ');
-    var i = 0;
-    while (out.length < target) { out.push(filler[i % filler.length]); i++; }
-    return out.slice(0, target).join('');
+  function note(line) {
+    log.push(line);
+    document.getElementById('cabfx-log').textContent = log.join('\n');
+    if (window.console && console.log) console.log('[fixture] ' + line);
   }
-
-  // Full-cap strings on ALL FOUR seats at once, including a 4-byte emoji so
-  // the rune arithmetic is exercised, not just the byte arithmetic.
-  var SEATS = TEAMS.map(function (team, i) {
-    return {
-      team: team,
-      alias: ALIASES[i],
-      say: padRunes(ALIASES[i] + ' takes the next shot 🎯', MAX_SAY_RUNES),
-      note: padRunes(
-        ALIASES[i] + ' is on one life and its wall is down to two bricks; ' +
-        'take the free shot now 🎯', MAX_NOTE_RUNES),
-      stance: ['aim', 'chase', 'catch', 'camp'][i],
-      aimAt: ALIASES[(i + 1) % 4]
-    };
-  });
 
   function fail(message) {
     document.documentElement.setAttribute('data-replay-error', message);
+    note('FAIL ' + message);
     throw new Error(message);
   }
 
-  // ---- self-check: the strings really are at the cap ---------------------
-  SEATS.forEach(function (seat) {
-    if (runes(seat.say) !== MAX_SAY_RUNES) {
-      fail('fixture say for ' + seat.alias + ' is ' + runes(seat.say) +
-        ' runes, expected ' + MAX_SAY_RUNES);
-    }
-    if (runes(seat.note) !== MAX_NOTE_RUNES) {
-      fail('fixture note for ' + seat.alias + ' is ' + runes(seat.note) +
-        ' runes, expected ' + MAX_NOTE_RUNES);
-    }
-  });
+  function runes(text) { return Array.from(text).length; }
 
-  // ---- the board's own text layout, drawn at three widths ---------------
-  // The board is a FIXED 1:1 arena, so a case is one square canvas whose CSS
-  // width is the stage width under test.
-  var BUBBLE_BAND_LO_CU = 92;
-  var BUBBLE_BAND_HI_CU = 99;
-  var MAX_BUBBLES = 3;
-
-  function drawCase(width) {
-    var host = document.createElement('div');
-    host.className = 'case';
-    var title = document.createElement('h2');
-    title.textContent = 'board at ' + width + ' px' +
-      (width <= 620 ? ' · tiny' : '');
-    host.appendChild(title);
-    var canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = width;                  // 1:1 arena
-    host.appendChild(canvas);
-    document.getElementById('cases').appendChild(host);
-
-    var ctx = canvas.getContext('2d');
-    var scale = width / 1000;               // board px -> canvas px
-    var tiny = width <= 620;
-    ctx.fillStyle = '#0a0d10';
-    ctx.fillRect(0, 0, width, width);
-    ctx.textBaseline = 'top';
-
-    // walls + mouths, so the case looks like the board it is checking
-    ctx.strokeStyle = 'rgba(242,232,216,0.18)';
-    ctx.lineWidth = Math.max(1, 24 * scale);
-    ctx.strokeRect(0, 0, width, width);
-
-    // 1. the reserved bubble band across the TOP of the board. Cabinet
-    //    coordinates run y UP, the canvas runs y DOWN, so the band converts.
-    var bandTop = ((100 - BUBBLE_BAND_HI_CU) / 100) * width;
-    var bandHeight = ((BUBBLE_BAND_HI_CU - BUBBLE_BAND_LO_CU) / 100) * width;
-    var bubbleSize = Math.max(9, Math.round(22 * scale));
-    ctx.font = bubbleSize + 'px ui-monospace, monospace';
-    if (!tiny) {
-      for (var b = 0; b < MAX_BUBBLES; b++) {
-        var seat = SEATS[b];
-        var label = seat.alias + ': ' + seat.say;
-        // Measure FIRST, then clamp inside the board on both axes: this is
-        // the whole discipline the scar is about.
-        var metrics = ctx.measureText(label);
-        var x = Math.max(2, Math.round((width - metrics.width) / 2));
-        var y = Math.max(2, Math.min(
-          width - bubbleSize - 2,
-          Math.round(bandTop + b * (bandHeight / MAX_BUBBLES))));
-        ctx.fillStyle = 'rgba(12,9,6,0.72)';
-        ctx.fillRect(x - 4, y - 2, Math.min(width - 4, metrics.width + 8),
-          bubbleSize + 4);
-        ctx.fillStyle = TINT[seat.team];
-        ctx.fillText(label, x, y);
-      }
-    }
-
-    // 2. one stance chip per cabinet, beside its own bar, clamped inside.
-    var chipSize = Math.max(8, Math.round(20 * scale));
-    ctx.font = chipSize + 'px ui-monospace, monospace';
-    if (!tiny) {
-      var anchors = [
-        [0.5, 0.82], [0.82, 0.5], [0.5, 0.18], [0.18, 0.5]
-      ];
-      for (var c = 0; c < SEATS.length; c++) {
-        var chip = SEATS[c].stance.toUpperCase() + '->' + SEATS[c].aimAt;
-        var m = ctx.measureText(chip);
-        var cx = Math.max(2, Math.min(
-          width - m.width - 2, Math.round(anchors[c][0] * width - m.width / 2)));
-        var cy = Math.max(2, Math.min(
-          width - chipSize - 2, Math.round(anchors[c][1] * width)));
-        ctx.fillStyle = TINT[SEATS[c].team];
-        ctx.fillText(chip, cx, cy);
-      }
-    }
-
-    // 3. the ROM caption, bottom-left, ALWAYS on — including at 360 px.
-    var romSize = Math.max(8, Math.round(22 * scale));
-    ctx.font = romSize + 'px ui-monospace, monospace';
-    ctx.fillStyle = '#e8a33d';
-    ctx.fillText('WARLORDS', 8, width - romSize - 8);
-
-    // 4. the match feed's worst row: a full-cap note. It lives in the chrome,
-    //    not on the board, but it is drawn here at board width so an
-    //    over-long note is caught with everything else.
-    var feedSize = Math.max(8, Math.round(16 * scale));
-    ctx.font = feedSize + 'px ui-monospace, monospace';
-    var feedTop = Math.round(width * 0.55);
-    for (var f = 0; f < SEATS.length; f++) {
-      var row = SEATS[f].alias + ': ' + SEATS[f].note;
-      // The feed ELLIPSIZES rather than overflowing: a row that does not fit
-      // is cut with a marker, never drawn past the edge.
-      var text = row;
-      while (ctx.measureText(text).width > width - 16 && text.length > 4) {
-        text = text.slice(0, text.length - 2);
-      }
-      if (text !== row) text = text + '…';
-      ctx.fillStyle = TINT[SEATS[f].team];
-      ctx.fillText(text, 8, feedTop + f * (feedSize + 3));
-    }
-    return canvas;
+  // ---- the shipped packet -------------------------------------------------
+  // Sprite v1, as bitworld writes it (spriteprotocol.addSprite/addObject) and
+  // as broadcast_core.js reads it. This walk extracts the GEOMETRY the board
+  // chose; the pixels are decoded by the real renderer, not here.
+  function readU16(b, o) { return b[o] | (b[o + 1] << 8); }
+  function readI16(b, o) { var v = readU16(b, o); return v > 0x7fff ? v - 0x10000 : v; }
+  function readU32(b, o) {
+    return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] * 0x1000000)) >>> 0;
   }
 
-  try {
-    [360, 620, 1280].forEach(drawCase);
-  } catch (error) {
-    document.documentElement.setAttribute(
-      'data-replay-error', String(error && error.message || error));
-    throw error;
+  function textPlacements(bytes, meta) {
+    var decoder = new TextDecoder('utf-8');
+    var sprites = {};
+    var placed = [];
+    var offset = 0;
+    while (offset < bytes.length) {
+      var kind = bytes[offset];
+      offset += 1;
+      if (kind === 0x01) {
+        var id = readU16(bytes, offset);
+        var width = readU16(bytes, offset + 2);
+        var height = readU16(bytes, offset + 4);
+        var compressed = readU32(bytes, offset + 6);
+        offset += 10 + compressed;
+        var labelLen = readU16(bytes, offset);
+        offset += 2;
+        var label = decoder.decode(bytes.subarray(offset, offset + labelLen));
+        offset += labelLen;
+        sprites[id] = { width: width, height: height, label: label };
+      } else if (kind === 0x02) {
+        var objectId = readU16(bytes, offset);
+        var x = readI16(bytes, offset + 2);
+        var y = readI16(bytes, offset + 4);
+        var spriteId = readU16(bytes, offset + 9);
+        offset += 11;
+        if (spriteId >= meta.textSpriteBase &&
+            spriteId < meta.textSpriteBase + meta.textSpritePool &&
+            sprites[spriteId]) {
+          placed.push({
+            text: sprites[spriteId].label, x: x, y: y,
+            w: sprites[spriteId].width, h: sprites[spriteId].height,
+            object: objectId
+          });
+        }
+      } else if (kind === 0x03) { offset += 2; }
+      else if (kind === 0x04) { /* no payload */ }
+      else if (kind === 0x05) { offset += 5; }
+      else if (kind === 0x06) { offset += 3; }
+      else { fail('unknown sprite protocol message 0x' + kind.toString(16)); }
+    }
+    return placed;
   }
 
-  // The same success marker the shipped shell sets, on the first drawn frame,
-  // so tools/ci/viewer_smoke.mjs gates this page unchanged.
-  requestAnimationFrame(function () {
-    document.documentElement.setAttribute('data-replay-loaded', 'true');
-  });
+  // ---- DOM -> canvas transcription ---------------------------------------
+  // The feed is DOM text; the probe only sees canvas text. Walk each element's
+  // LINE BOXES with a Range (so a wrapped sentence transcribes as the lines the
+  // browser actually laid out, at the geometry it actually used) and redraw
+  // each line on the board canvas in its own computed font.
+  function lineRunsOf(element) {
+    var node = element.firstChild;
+    if (!node || node.nodeType !== 3) return [];
+    var text = node.nodeValue;
+    var range = document.createRange();
+    var runs = [];
+    var start = 0;
+    var current = null;
+    for (var i = 0; i < text.length; i++) {
+      range.setStart(node, i);
+      range.setEnd(node, i + 1);
+      var rect = range.getBoundingClientRect();
+      if (!rect.width && !rect.height) continue;      // collapsed whitespace
+      if (current && Math.abs(rect.top - current.top) > 0.5) {
+        runs.push({ text: text.slice(start, i), rect: current });
+        start = i;
+        current = null;
+      }
+      if (!current) {
+        current = { top: rect.top, left: rect.left, bottom: rect.bottom, right: rect.right };
+      } else {
+        current.left = Math.min(current.left, rect.left);
+        current.right = Math.max(current.right, rect.right);
+        current.bottom = Math.max(current.bottom, rect.bottom);
+      }
+    }
+    if (current) runs.push({ text: text.slice(start), rect: current });
+    return runs;
+  }
+
+  function fontOf(element) {
+    var style = getComputedStyle(element);
+    return style.fontStyle + ' ' + style.fontWeight + ' ' + style.fontSize +
+      '/' + style.lineHeight + ' ' + style.fontFamily;
+  }
+
+  function boot() {
+    var meta = null;
+    var packet = null;
+    var chromeState = null;
+    var stage = document.getElementById('stage');
+    var canvas = document.getElementById('board');
+    var killfeed = document.getElementById('killfeed');
+    var root = document.documentElement;
+    var core = null;
+    var drawn = 0;
+    var caseIndex = 0;
+
+    function raf() {
+      return new Promise(function (resolve) {
+        requestAnimationFrame(function () { requestAnimationFrame(resolve); });
+      });
+    }
+
+    function fetchText(url) {
+      return fetch(url).then(function (response) {
+        if (!response.ok) fail('GET ' + url + ' -> HTTP ' + response.status);
+        return response.text();
+      });
+    }
+
+    return fetchText('./index.html').then(function (page) {
+      // The REAL chrome's stylesheet — the same rules the shipped viewer lays
+      // the match feed out with, including the @font-face for data/font.ttf.
+      var styles = page.match(/<style>[\s\S]*?<\/style>/gi) || [];
+      if (!styles.length) fail('no <style> block in the bundle index.html');
+      var host = document.createElement('div');
+      host.innerHTML = styles.join('\n');
+      var sheets = host.querySelectorAll('style');
+      for (var i = 0; i < sheets.length; i++) {
+        document.head.insertBefore(sheets[i], document.head.firstChild);
+      }
+      note('chrome CSS: ' + sheets.length + ' block(s) from index.html');
+      return fetch('./fixture_meta.json');
+    }).then(function (response) {
+      if (!response.ok) {
+        fail('GET fixture_meta.json -> HTTP ' + response.status +
+          ' (tools/ci/gen_render_fixture.nim did not run)');
+      }
+      return response.json();
+    }).then(function (value) {
+      meta = value;
+      return fetch('./board_packet.bin');
+    }).then(function (response) {
+      if (!response.ok) fail('GET board_packet.bin -> HTTP ' + response.status);
+      return response.arrayBuffer();
+    }).then(function (buffer) {
+      packet = new Uint8Array(buffer);
+      note('shipped frame: ' + packet.length + ' packet bytes, board ' +
+        meta.boardW + 'x' + meta.boardH);
+
+      // ---- the board's baked strings, from the shipped bytes -------------
+      var placements = textPlacements(packet, meta);
+      if (!placements.length) {
+        fail('the shipped packet placed NO baked text: the fixture would ' +
+          'cover nothing');
+      }
+      var says = placements.filter(function (p) { return p.text.indexOf(': ') > 0; });
+      if (says.length < 3) {
+        fail('expected the board to place at least 3 speech bubbles, saw ' +
+          says.length);
+      }
+      says.forEach(function (bubble) {
+        var said = bubble.text.slice(bubble.text.indexOf(': ') + 2);
+        if (runes(said) !== meta.maxSayRunes) {
+          fail('bubble ' + JSON.stringify(bubble.text.slice(0, 24)) + ' carries ' +
+            runes(said) + ' runes, expected the full ' + meta.maxSayRunes +
+            ': a shortened remark leaves this fixture passing while testing ' +
+            'nothing');
+        }
+      });
+      placements.forEach(function (p) {
+        if (p.x < 0 || p.y < 0 || p.x + p.w > meta.boardW ||
+            p.y + p.h > meta.boardH) {
+          fail('the board placed ' + JSON.stringify(p.text.slice(0, 32)) + ' at [' +
+            p.x + ',' + p.y + ' ' + p.w + 'x' + p.h + '], outside the ' +
+            meta.boardW + 'x' + meta.boardH + ' board');
+        }
+      });
+      // Inside the board is not enough: two baked strings on top of each
+      // other are both drawn, both "inside", and neither is readable.
+      for (var a = 0; a < placements.length; a++) {
+        for (var b = a + 1; b < placements.length; b++) {
+          var p = placements[a], q = placements[b];
+          if (p.x < q.x + q.w && q.x < p.x + p.w &&
+              p.y < q.y + q.h && q.y < p.y + p.h) {
+            fail('the board drew ' + JSON.stringify(p.text.slice(0, 24)) +
+              ' over ' + JSON.stringify(q.text.slice(0, 24)) +
+              ': the band is too small for ' +
+              meta.maxSayRunes + ' runes at this face — widen it');
+          }
+        }
+      }
+      note('board text: ' + placements.length + ' baked strings, ' +
+        says.length + ' full-cap bubbles, all inside the board');
+
+      // ---- the real renderer ---------------------------------------------
+      core = window.BroadcastCore.create({
+        canvas: canvas,
+        websocket: false,
+        playoutBuffer: false,
+        viewportWidth: WIDTHS[0],
+        viewportHeight: WIDTHS[0],
+        devicePixelRatio: 1,
+        onText: function (text) { chromeState = text; }
+      });
+      core.start();
+      core.ingest(packet);
+      if (!chromeState) {
+        fail('the packet carried no chrome JSON on sprite ' +
+          meta.chromeSpriteId);
+      }
+      var state = JSON.parse(chromeState);
+      var stances = state.stances || [];
+      if (stances.length !== 4) {
+        fail('expected four stance records in the chrome JSON, saw ' +
+          stances.length);
+      }
+      stances.forEach(function (record) {
+        if (runes(record.note || '') !== meta.maxNoteRunes) {
+          fail(record.alias + "'s note is " + runes(record.note || '') +
+            ' runes, expected the full ' + meta.maxNoteRunes);
+        }
+      });
+      note('chrome JSON: ' + stances.length + ' stance records, every note at ' +
+        meta.maxNoteRunes + ' runes');
+
+      function drawCase(width) {
+        // relayout()'s own numbers: --hudscale is the board width over the
+        // 760px reference, clamped, and `.tiny` is the <=620px board.
+        var hudscale = Math.max(0.5, Math.min(1.6, width / 760));
+        root.style.setProperty('--hudscale', hudscale.toFixed(3));
+        // No scorebug and no transport in the fixture, so the reserved bands
+        // are zero — which puts the feed as LOW in the stage as it can ever
+        // sit, the strictest case for a row running past the bottom edge.
+        root.style.setProperty('--topband', '0px');
+        root.style.setProperty('--band', '0px');
+        stage.style.width = width + 'px';
+        stage.style.height = width + 'px';
+        stage.classList.toggle('tiny', width <= 620);
+
+        // The feed, as the chrome builds it: one row per stance note, newest
+        // last (#killfeed is column-reverse), with the classes the game block
+        // uses (client/replay_broadcast.html, cabStances()).
+        killfeed.textContent = '';
+        stances.forEach(function (record) {
+          var row = document.createElement('div');
+          row.className = 'feed-row cab-note-row';
+          var who = document.createElement('span');
+          who.className = 'who ' + (record.team || '');
+          who.textContent = record.alias || '';
+          var glyph = document.createElement('span');
+          glyph.className = 'glyph';
+          glyph.textContent = ':';
+          var body = document.createElement('span');
+          body.className = 'cab-note';
+          body.textContent = record.note || '';
+          row.appendChild(who);
+          row.appendChild(glyph);
+          row.appendChild(body);
+          killfeed.appendChild(row);
+        });
+
+        core.setViewportSize(width, width, 1);
+        core.ingest(packet);
+        // Play the entrance animation THROUGH TO SETTLE before measuring: a
+        // feed row slides in from +30u, and a rect read mid-slide is the
+        // animation's, not the layout's (checklist item 15's "an entrance
+        // animation played through to settle").
+        var settled = [];
+        var animating = killfeed.getAnimations
+          ? killfeed.getAnimations({ subtree: true }) : [];
+        for (var a = 0; a < animating.length; a++) {
+          settled.push(animating[a].finished.catch(function () {}));
+        }
+        return Promise.all(settled).then(raf).then(function () {
+          var ctx = canvas.getContext('2d');
+          var transform = core.getTransform();
+          var boardRect = canvas.getBoundingClientRect();
+
+          // 1. the board's baked strings, at the geometry the packet placed
+          //    them at, in the board's own face.
+          ctx.textBaseline = 'top';
+          placements.forEach(function (p) {
+            // pixie bakes at `size` with lineHeight 1.2 and a 2px pad
+            // (global.textSprite), so the drawn face size is recoverable from
+            // the sprite the board actually shipped.
+            var size = Math.max(4, (p.h - 2) / 1.2) * transform.scale;
+            ctx.font = Math.round(size) + "px 'rajdhani', monospace";
+            ctx.fillStyle = '#f2e8d8';
+            ctx.fillText(
+              p.text,
+              transform.offsetX + (p.x + 2) * transform.scale,
+              transform.offsetY + (p.y + 1) * transform.scale);
+            drawn += 1;
+          });
+
+          // 2. the feed's DOM lines, at the geometry the real CSS gave them.
+          var rows = killfeed.querySelectorAll('.feed-row');
+          var stageRect = stage.getBoundingClientRect();
+          for (var r = 0; r < rows.length; r++) {
+            var rowRect = rows[r].getBoundingClientRect();
+            if (rowRect.left < stageRect.left - 1 ||
+                rowRect.right > stageRect.right + 1 ||
+                rowRect.top < stageRect.top - 1 ||
+                rowRect.bottom > stageRect.bottom + 1) {
+              fail('at ' + width + 'px the feed row [' +
+                Math.round(rowRect.left - stageRect.left) + ',' +
+                Math.round(rowRect.top - stageRect.top) + ' ' +
+                Math.round(rowRect.width) + 'x' + Math.round(rowRect.height) +
+                '] left the ' + Math.round(stageRect.width) + 'x' +
+                Math.round(stageRect.height) + ' stage: the note band is too ' +
+                'small — widen it, never shorten the note');
+            }
+            var spans = rows[r].querySelectorAll('span');
+            for (var s = 0; s < spans.length; s++) {
+              var font = fontOf(spans[s]);
+              var lines = lineRunsOf(spans[s]);
+              for (var l = 0; l < lines.length; l++) {
+                if (!lines[l].text.trim()) continue;
+                ctx.font = font;
+                ctx.fillStyle = '#e8a33d';
+                ctx.fillText(
+                  lines[l].text,
+                  lines[l].rect.left - boardRect.left,
+                  lines[l].rect.top - boardRect.top);
+                drawn += 1;
+              }
+            }
+          }
+          note('case ' + width + 'px: ' + placements.length +
+            ' board strings + ' + rows.length + ' feed rows drawn (hudscale ' +
+            hudscale.toFixed(3) + ')');
+        });
+      }
+
+      function next() {
+        if (caseIndex >= WIDTHS.length) return Promise.resolve();
+        var width = WIDTHS[caseIndex];
+        caseIndex += 1;
+        return drawCase(width).then(next);
+      }
+      return next();
+    }).then(function () {
+      if (drawn < 12) fail('only ' + drawn + ' strings were drawn');
+      note('drew ' + drawn + ' strings across ' + WIDTHS.length + ' widths');
+      // The same success marker the shipped shell sets, on the first drawn
+      // frame, so tools/ci/viewer_smoke.mjs gates this page unchanged.
+      requestAnimationFrame(function () {
+        document.documentElement.setAttribute('data-replay-loaded', 'true');
+      });
+    }).catch(function (error) {
+      if (!document.documentElement.getAttribute('data-replay-error')) {
+        document.documentElement.setAttribute(
+          'data-replay-error', String((error && error.message) || error));
+      }
+      throw error;
+    });
+  }
+
+  boot();
 })();
 </script>
 </body>
