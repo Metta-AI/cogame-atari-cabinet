@@ -61,6 +61,17 @@ suite "viewer":
     check "stage.classList.toggle('tiny', boardW <= 620)" in page
     check "#endcard {" in page
     check "bottom: var(--band" in page
+    # Every var(--band) READ carries the 0px fallback: relayout() sets the
+    # property on its first pass, and until then a calc() over an unset custom
+    # property is invalid at computed-value time and the whole declaration is
+    # dropped -- which drops a fixed overlay into the transport band.
+    var offset = 0
+    while true:
+      let at = page.find("var(--band", offset)
+      if at < 0:
+        break
+      offset = at + 10
+      check page[at ..< min(page.len, at + 16)] == "var(--band, 0px)"
 
   test "every kept element is present":
     for id in ["viewport", "stage", "board", "lightpool", "grain",

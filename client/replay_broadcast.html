@@ -4124,7 +4124,12 @@ body[data-embed] #board { top: 0; height: 100%; }
 #cab-legend {
   position: absolute;
   left: calc(10 * var(--u));
-  bottom: calc(var(--band) + 6 * var(--u));
+  /* The `0px` fallback is load-bearing, not decoration: before relayout()'s
+     first pass --band is unset, and a calc() over an unset custom property is
+     invalid at computed-value time, so the whole declaration is dropped and
+     the legend falls into the transport band for a frame. Every inherited
+     rule uses this form (#endcard, :745). */
+  bottom: calc(var(--band, 0px) + 6 * var(--u));
   font-family: var(--finefont);
   font-size: calc(7.5 * var(--u));
   letter-spacing: 0.12em;
