@@ -99,6 +99,13 @@ suite "viewer":
                      "#zoom-slider {", "#fpv {", "#povBadge {"]:
       checkpoint("expected NO CSS " & selector)
       check selector notin page
+    # …and so did the WIRING. Checklist item 14's fourth bullet asks for the
+    # zoom/minimap calls to be REMOVED on a board that always fits the frame,
+    # not hidden behind a null guard: a guarded slider is dead, but the
+    # keyboard and pinch paths were not guarded and still zoomed the board.
+    for call in ["core.zoomAt(", "core.setZoom(", "core.attachMinimap("]:
+      checkpoint("expected NO " & call)
+      check call notin page
 
   test "a .beat-marker CSS rule exists for EVERY beat kind the sim emits, and every marker is a button":
     for kind in ScrubberBeatKinds:
