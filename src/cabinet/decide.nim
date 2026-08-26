@@ -296,25 +296,49 @@ proc repairStance*(
   ## A field the model left out keeps LAST turn's value, else `bulwark`'s. The
   ## parser already defaults each field; this is the second half of the rule —
   ## a policy that named three fields meant the fourth to carry on.
-  let legality = stance.validateStance(
-    sim.cabinetOfSeat(seat),
-    (block:
-      var flags: array[CabinetCount, bool]
-      for k in 0 ..< CabinetCount: flags[k] = sim.cabinets[k].isOut
-      flags),
-    (block:
-      var live: seq[bool]
-      for ball in sim.balls: live.add(ball.state == bsLive)
-      live))
-  if legality.len == 0:
+  ##
+  ## The repair is PER FIELD. Discarding a whole stance because one field was
+  ## illegal threw away four legal decisions to fix one: a reply that named a
+  ## ball that had just been conceded lost its stance, its post, its lead and
+  ## its aggression too, and the seat played bulwark for the turn while the
+  ## record said otherwise.
+  let cabinet = sim.cabinetOfSeat(seat)
+  var
+    cabinetOut: array[CabinetCount, bool]
+    ballLive: seq[bool]
+  for k in 0 ..< CabinetCount:
+    cabinetOut[k] = sim.cabinets[k].isOut
+  for ball in sim.balls:
+    ballLive.add(ball.state == bsLive)
+  if stance.validateStance(cabinet, cabinetOut, ballLive).len == 0:
     return
-  # An illegal field is repaired, never fatal.
-  var repaired = engine.bulwarkFor(sim, seat)
-  repaired.note = stance.note
-  repaired.say = stance.say
-  repaired.source = stance.source
-  repaired.latencyMs = stance.latencyMs
-  stance = repaired
+  let fallback = engine.bulwarkFor(sim, seat)
+  # The caps and the bounds are CLAMPED, which is what the parser does with an
+  # out-of-range number and what keeps "post hard right" meaning that…
+  stance.note = stance.note.truncateRunes(MaxNoteRunes)
+  stance.say = stance.say.truncateRunes(MaxSayRunes)
+  stance.postUu = clamp(stance.postUu, -PaddleTravelHalf, PaddleTravelHalf)
+  stance.leadTicks = clamp(stance.leadTicks, 0, MaxLeadTicks)
+  stance.aggression255 = clamp(stance.aggression255, 0, 255)
+  # …while a REFERENCE to something that is not there any more (a ball that is
+  # not live, my own cabinet, a cabinet that is out) has no legal
+  # interpretation, so that field alone takes bulwark's.
+  if stance.targetBall >= 0 and
+      (stance.targetBall >= ballLive.len or not ballLive[stance.targetBall]):
+    stance.targetBall = fallback.targetBall
+  if stance.aimAt >= 0 and
+      (stance.aimAt == cabinet or stance.aimAt >= CabinetCount or
+       cabinetOut[stance.aimAt]):
+    stance.aimAt = fallback.aimAt
+  # validateStance is the authority on legality and this repair enumerates its
+  # rules by hand; if the two ever drift, the seat still plays something legal.
+  if stance.validateStance(cabinet, cabinetOut, ballLive).len > 0:
+    var repaired = fallback
+    repaired.note = stance.note
+    repaired.say = stance.say
+    repaired.source = stance.source
+    repaired.latencyMs = stance.latencyMs
+    stance = repaired
 
 proc turnBatch*(
   engine: DecisionEngine,

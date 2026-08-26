@@ -319,6 +319,62 @@ suite "engine":
     check document["endRule"].getStr == EndRuleSimFault
     check document["scores"].len == CabinetCount
 
+  test "ONE illegal field is repaired, the rest of the stance survives":
+    # A reply that names a ball which was conceded a tick ago used to lose its
+    # stance, its post, its lead and its aggression as well: the whole stance
+    # was replaced with bulwark's and only note/say/source/latency were kept
+    # (r1-9). The note's rule is per FIELD.
+    let config = episodeConfig(14)
+    var game = playingGame(config)
+    var engine = llmEngine(game)
+    let cabinet = game.cabinetOfSeat(0)
+    game.balls[1].state = bsServing            ## B2 is not live any more
+    var stance = defaultStance()
+    stance.stance = stCamp
+    stance.postUu = PaddleTravelHalf
+    stance.leadTicks = 3
+    stance.aggression255 = 17
+    stance.note = "hold the post"
+    stance.say = "camping"
+    stance.source = ssLlm
+    stance.targetBall = 1                      ## the ONE illegal field
+    stance.aimAt = (cabinet + 1) mod CabinetCount
+    engine.repairStance(game, 0, stance)
+    check stance.stance == stCamp              ## kept
+    check stance.postUu == PaddleTravelHalf    ## kept
+    check stance.leadTicks == 3                ## kept
+    check stance.aggression255 == 17           ## kept
+    check stance.aimAt == (cabinet + 1) mod CabinetCount
+    check stance.note == "hold the post"
+    check stance.say == "camping"
+    check stance.source == ssLlm
+    check stance.targetBall != 1               ## repaired
+    var cabinetOut: array[CabinetCount, bool]
+    var ballLive: seq[bool]
+    for k in 0 ..< CabinetCount:
+      cabinetOut[k] = game.cabinets[k].isOut
+    for ball in game.balls:
+      ballLive.add(ball.state == bsLive)
+    check stance.validateStance(cabinet, cabinetOut, ballLive) == ""
+
+  test "an out-of-range number is CLAMPED, and aim_at at myself takes bulwark's":
+    let config = episodeConfig(15)
+    var game = playingGame(config)
+    var engine = llmEngine(game)
+    let cabinet = game.cabinetOfSeat(1)
+    var stance = defaultStance()
+    stance.stance = stAim
+    stance.postUu = PaddleTravelHalf * 4       ## illegal
+    stance.leadTicks = 900                     ## illegal
+    stance.aggression255 = -3                  ## illegal
+    stance.aimAt = cabinet                     ## illegal: my own cabinet
+    engine.repairStance(game, 1, stance)
+    check stance.stance == stAim
+    check stance.postUu == PaddleTravelHalf
+    check stance.leadTicks == MaxLeadTicks
+    check stance.aggression255 == 0
+    check stance.aimAt != cabinet
+
   test "parseRegistration reads the seat's ONE message and drops anything else":
     check parseRegistration("""{"type":"register","prompt":"go","policy":"x"}""").ok
     check parseRegistration(
