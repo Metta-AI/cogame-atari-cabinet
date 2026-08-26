@@ -350,10 +350,18 @@ jobs:
           # coworld whose whole board fits the frame. DROP THIS FLAG ONLY if
           # the board is pannable, where drawing off-frame is normal -- the
           # count is still reported on stdout and in viewer-smoke.json.
+          # --soak 12: LOADING IS NOT PLAYING. cogball 0.1.4 loaded, drew one
+          # frame, set data-replay-loaded and then threw inside that frame's
+          # feed render -- the board froze on tick 2 looking entirely healthy,
+          # and the scrub readouts agreed, because seeking skips the frame that
+          # did the killing. The certification fixture is 1440 ticks = 60 s of
+          # playback for exactly this reason, so a 12 s soak cannot outrun it
+          # (ecos, 2026-08-23).
           node tools/ci/viewer_smoke.mjs \
             --bundle dist/static-replay-viewer \
             --replay "${replay}" \
             --timeout 90 \
+            --soak 12 \
             --strict-text-bounds
 
       # -----------------------------------------------------------------

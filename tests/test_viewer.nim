@@ -241,6 +241,15 @@ suite "viewer":
     check "gen_render_fixture.nim" in ci
     check "render-fixture" in ci
 
+  test "both viewer_smoke steps carry the flags the design note names":
+    let ci = sourceText(".github/workflows/ci.yml")
+    # The real-bundle smoke PLAYS the replay for 12 s: a viewer that loads,
+    # draws one frame and then throws looks identical to a healthy one to the
+    # load signal and to a scrub (cogball 0.1.4).
+    check "--soak 12" in ci
+    # …and both steps gate text bounds, which is only sound on a fixed arena.
+    check ci.count("\n            --strict-text-bounds") == 2
+
   test "a full-cap stance note gets a WRAPPING band in the feed":
     # The inherited .feed-row is nowrap and sized to content, which sends a
     # 160-rune note off the left edge of a 360 px stage. The band widens; the
