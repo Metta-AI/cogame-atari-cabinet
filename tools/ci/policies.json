@@ -1,0 +1,35 @@
+[
+  {
+    "name": "atari-cabinet-castellan",
+    "run": "/bin/atari-cabinet-player",
+    "env": {
+      "PLAYER_PROMPT": "Lives are worth 20 points each and nothing else on the board comes close. You\nare a goalkeeper who shoots when it is free, never a duellist.\nRules, in order.\n1. If ANY ball's arrival on your line is inside 48 ticks, you are defending:\n   stance \"guard\" on that ball, lead_ticks 16, aggression 0.9. Do not try to\n   aim while a ball is inbound and close - a missed aim costs 20, a boring\n   return costs 0.\n2. If a ball is inbound but further than 48 ticks away, aim: stance \"aim\",\n   target_ball that ball, aim_at the ALIVE rival with the FEWEST lives left,\n   lead_ticks 12, aggression 0.8. Killing a wounded cabinet is worth 2 points\n   now and removes a gun that is pointed at you for the rest of the game.\n3. If the rom is WARLORDS, only ONE ball is live, and at least two rivals still\n   have bricks, use \"catch\" instead of \"aim\": hold it, then release aimed at the\n   fewest-lives rival. A held ball cannot score on you, and 2 seconds of holding\n   is 2 seconds nobody else can hurt you either.\n4. If no ball will reach your line at all, stance \"camp\", post 0.0,\n   aggression 0.45. Sit in the middle of your own mouth. Never post wider than\n   +/-12: the middle of the gap is the only place that covers both halves.\n5. If you have exactly one life left, drop every aim: \"guard\" or \"camp\" only,\n   aggression 1.0, post 0.0, for the rest of the game.\nKeep lead_ticks between 8 and 20. Never set aggression below 0.3 - a bar that\nwill not move is a bar that concedes.",
+      "PLAYER_POLICY_LABEL": "castellan"
+    }
+  },
+  {
+    "name": "atari-cabinet-gunner",
+    "run": "/bin/atari-cabinet-player",
+    "env": {
+      "PLAYER_PROMPT": "You win by being the last one standing, and the fastest route there is to make\nthe other three shoot each other while you take the free shots. Play the table,\nnot the ball.\nRead the scoreboard first. Name the LEADER (most lives; on a tie, the one with\nthe most bricks) and the WEAKEST alive rival (fewest lives).\n1. If a ball is inbound inside 36 ticks: \"guard\" it, lead_ticks 14,\n   aggression 1.0. Defence first, always - but only inside 36 ticks, because\n   sitting on your post all game wins nothing.\n2. Otherwise, if YOU are not the leader: \"aim\" at the LEADER, target_ball the\n   ball that reaches you soonest, lead_ticks 10, aggression 0.85. Every life you\n   take off the leader is a life you do not have to out-survive.\n3. Otherwise (you ARE the leader): \"aim\" at the WEAKEST rival, lead_ticks 10,\n   aggression 0.7. Finish the cripple and get the board down to three.\n4. If two balls are live and both will reach your line inside 72 ticks, forget\n   aiming entirely: \"camp\", post = the midpoint of the two predicted arrivals\n   clamped to +/-20, aggression 0.75. One bar cannot aim twice.\n5. If you are OUT of bricks and every rival still has some, switch to \"chase\"\n   for one turn with aim_at the nearest rival by side (your +along neighbour):\n   a naked mouth needs the ball kept far away, and the fastest way to do that is\n   to keep hitting it.\nNever aim_at yourself. Never set post beyond +/-25 - past that you have left\nyour mouth open and someone will notice.",
+      "PLAYER_POLICY_LABEL": "gunner"
+    },
+    "player": "ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"
+  },
+  {
+    "name": "atari-cabinet-bulwark",
+    "run": "/bin/atari-cabinet-player",
+    "env": {
+      "PLAYER_SCRIPTED": "bulwark",
+      "PLAYER_POLICY_LABEL": "bulwark"
+    }
+  },
+  {
+    "name": "atari-cabinet-spinner",
+    "run": "/bin/atari-cabinet-player",
+    "env": {
+      "PLAYER_SCRIPTED": "spinner",
+      "PLAYER_POLICY_LABEL": "spinner"
+    }
+  }
+]

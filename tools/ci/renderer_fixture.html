@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>THE CABINET — worst-case renderer fixture</title>
+<!--
+  WHY THIS FILE EXISTS.
+
+  tools/ci/docker_smoke.sh runs with NO ANTHROPIC_API_KEY, so every seat in
+  every CI episode plays the scripted baseline, and a scripted baseline emits
+  only its five short fixed `say` strings. Every replay CI produces therefore
+  carries almost no LLM text — which means nothing that plays a replay can
+  exercise the chrome that shows it: the speech-bubble band, the stance chips,
+  the aim-ray legend and the match feed at FULL CAP (cogchemists, 2026-08-24).
+
+  So this page draws that worst case directly, on the MAIN THREAD (the shipped
+  board composites inside a Worker on an OffscreenCanvas, which
+  viewer_smoke.mjs's fillText probe cannot see at all), at the three widths
+  that matter: the 360 px featured-match iframe, the 620 px `.tiny`
+  threshold, and a 1280 px desktop stage. It uses the SAME layout rules the
+  board uses:
+
+    * bubbles live in a RESERVED BAND across the top of the board
+      (Y in [92, 99] cu -> the top 8 % of the board in screen space), are
+      centred, and are clamped inside the board on both axes — never
+      positioned relative to a paddle, which is how text ends up drawn at a
+      negative coordinate and silently clipped to a sliver;
+    * stance chips sit beside their own bar and are clamped inside the board;
+    * the ROM caption sits in the bottom-left margin.
+
+  It self-checks its own string lengths first (48 runes of `say`, 160 runes of
+  `note`, on all four seats at once) and reports through the same two
+  attributes the shipped shell uses, so viewer_smoke.mjs gates it unchanged:
+  data-replay-loaded="true" on success, data-replay-error="<message>" on
+  failure.
+-->
+<style>
+  html, body { margin: 0; background: #0b0704; color: #f2e8d8;
+    font-family: ui-monospace, Menlo, monospace; }
+  .case { padding: 8px 10px 14px; }
+  .case h2 { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #e8a33d; margin: 6px 0; }
+  canvas { display: block; background: #06080a; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<div id="cases"></div>
+<script>
+(function () {
+  'use strict';
+
+  // ---- the four seats, at the server's own caps --------------------------
+  var MAX_SAY_RUNES = 48;
+  var MAX_NOTE_RUNES = 160;
+  var TEAMS = ['red', 'blue', 'green', 'yellow'];
+  var ALIASES = ['RED', 'BLUE', 'GREEN', 'YELLOW'];
+  var TINT = {
+    red: '#e0523a', blue: '#3f7cc4', green: '#45a85e', yellow: '#ddc531'
+  };
+
+  function runes(text) { return Array.from(text).length; }
+  function padRunes(text, target) {
+    var out = Array.from(text);
+    var filler = Array.from('· aim at the wounded cabinet and keep the middle ');
+    var i = 0;
+    while (out.length < target) { out.push(filler[i % filler.length]); i++; }
+    return out.slice(0, target).join('');
+  }
+
+  // Full-cap strings on ALL FOUR seats at once, including a 4-byte emoji so
+  // the rune arithmetic is exercised, not just the byte arithmetic.
+  var SEATS = TEAMS.map(function (team, i) {
+    return {
+      team: team,
+      alias: ALIASES[i],
+      say: padRunes(ALIASES[i] + ' takes the next shot 🎯', MAX_SAY_RUNES),
+      note: padRunes(
+        ALIASES[i] + ' is on one life and its wall is down to two bricks; ' +
+        'take the free shot now 🎯', MAX_NOTE_RUNES),
+      stance: ['aim', 'chase', 'catch', 'camp'][i],
+      aimAt: ALIASES[(i + 1) % 4]
+    };
+  });
+
+  function fail(message) {
+    document.documentElement.setAttribute('data-replay-error', message);
+    throw new Error(message);
+  }
+
+  // ---- self-check: the strings really are at the cap ---------------------
+  SEATS.forEach(function (seat) {
+    if (runes(seat.say) !== MAX_SAY_RUNES) {
+      fail('fixture say for ' + seat.alias + ' is ' + runes(seat.say) +
+        ' runes, expected ' + MAX_SAY_RUNES);
+    }
+    if (runes(seat.note) !== MAX_NOTE_RUNES) {
+      fail('fixture note for ' + seat.alias + ' is ' + runes(seat.note) +
+        ' runes, expected ' + MAX_NOTE_RUNES);
+    }
+  });
+
+  // ---- the board's own text layout, drawn at three widths ---------------
+  // The board is a FIXED 1:1 arena, so a case is one square canvas whose CSS
+  // width is the stage width under test.
+  var BUBBLE_BAND_LO_CU = 92;
+  var BUBBLE_BAND_HI_CU = 99;
+  var MAX_BUBBLES = 3;
+
+  function drawCase(width) {
+    var host = document.createElement('div');
+    host.className = 'case';
+    var title = document.createElement('h2');
+    title.textContent = 'board at ' + width + ' px' +
+      (width <= 620 ? ' · tiny' : '');
+    host.appendChild(title);
+    var canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = width;                  // 1:1 arena
+    host.appendChild(canvas);
+    document.getElementById('cases').appendChild(host);
+
+    var ctx = canvas.getContext('2d');
+    var scale = width / 1000;               // board px -> canvas px
+    var tiny = width <= 620;
+    ctx.fillStyle = '#0a0d10';
+    ctx.fillRect(0, 0, width, width);
+    ctx.textBaseline = 'top';
+
+    // walls + mouths, so the case looks like the board it is checking
+    ctx.strokeStyle = 'rgba(242,232,216,0.18)';
+    ctx.lineWidth = Math.max(1, 24 * scale);
+    ctx.strokeRect(0, 0, width, width);
+
+    // 1. the reserved bubble band across the TOP of the board. Cabinet
+    //    coordinates run y UP, the canvas runs y DOWN, so the band converts.
+    var bandTop = ((100 - BUBBLE_BAND_HI_CU) / 100) * width;
+    var bandHeight = ((BUBBLE_BAND_HI_CU - BUBBLE_BAND_LO_CU) / 100) * width;
+    var bubbleSize = Math.max(9, Math.round(22 * scale));
+    ctx.font = bubbleSize + 'px ui-monospace, monospace';
+    if (!tiny) {
+      for (var b = 0; b < MAX_BUBBLES; b++) {
+        var seat = SEATS[b];
+        var label = seat.alias + ': ' + seat.say;
+        // Measure FIRST, then clamp inside the board on both axes: this is
+        // the whole discipline the scar is about.
+        var metrics = ctx.measureText(label);
+        var x = Math.max(2, Math.round((width - metrics.width) / 2));
+        var y = Math.max(2, Math.min(
+          width - bubbleSize - 2,
+          Math.round(bandTop + b * (bandHeight / MAX_BUBBLES))));
+        ctx.fillStyle = 'rgba(12,9,6,0.72)';
+        ctx.fillRect(x - 4, y - 2, Math.min(width - 4, metrics.width + 8),
+          bubbleSize + 4);
+        ctx.fillStyle = TINT[seat.team];
+        ctx.fillText(label, x, y);
+      }
+    }
+
+    // 2. one stance chip per cabinet, beside its own bar, clamped inside.
+    var chipSize = Math.max(8, Math.round(20 * scale));
+    ctx.font = chipSize + 'px ui-monospace, monospace';
+    if (!tiny) {
+      var anchors = [
+        [0.5, 0.82], [0.82, 0.5], [0.5, 0.18], [0.18, 0.5]
+      ];
+      for (var c = 0; c < SEATS.length; c++) {
+        var chip = SEATS[c].stance.toUpperCase() + '->' + SEATS[c].aimAt;
+        var m = ctx.measureText(chip);
+        var cx = Math.max(2, Math.min(
+          width - m.width - 2, Math.round(anchors[c][0] * width - m.width / 2)));
+        var cy = Math.max(2, Math.min(
+          width - chipSize - 2, Math.round(anchors[c][1] * width)));
+        ctx.fillStyle = TINT[SEATS[c].team];
+        ctx.fillText(chip, cx, cy);
+      }
+    }
+
+    // 3. the ROM caption, bottom-left, ALWAYS on — including at 360 px.
+    var romSize = Math.max(8, Math.round(22 * scale));
+    ctx.font = romSize + 'px ui-monospace, monospace';
+    ctx.fillStyle = '#e8a33d';
+    ctx.fillText('WARLORDS', 8, width - romSize - 8);
+
+    // 4. the match feed's worst row: a full-cap note. It lives in the chrome,
+    //    not on the board, but it is drawn here at board width so an
+    //    over-long note is caught with everything else.
+    var feedSize = Math.max(8, Math.round(16 * scale));
+    ctx.font = feedSize + 'px ui-monospace, monospace';
+    var feedTop = Math.round(width * 0.55);
+    for (var f = 0; f < SEATS.length; f++) {
+      var row = SEATS[f].alias + ': ' + SEATS[f].note;
+      // The feed ELLIPSIZES rather than overflowing: a row that does not fit
+      // is cut with a marker, never drawn past the edge.
+      var text = row;
+      while (ctx.measureText(text).width > width - 16 && text.length > 4) {
+        text = text.slice(0, text.length - 2);
+      }
+      if (text !== row) text = text + '…';
+      ctx.fillStyle = TINT[SEATS[f].team];
+      ctx.fillText(text, 8, feedTop + f * (feedSize + 3));
+    }
+    return canvas;
+  }
+
+  try {
+    [360, 620, 1280].forEach(drawCase);
+  } catch (error) {
+    document.documentElement.setAttribute(
+      'data-replay-error', String(error && error.message || error));
+    throw error;
+  }
+
+  // The same success marker the shipped shell sets, on the first drawn frame,
+  // so tools/ci/viewer_smoke.mjs gates this page unchanged.
+  requestAnimationFrame(function () {
+    document.documentElement.setAttribute('data-replay-loaded', 'true');
+  });
+})();
+</script>
+</body>
+</html>

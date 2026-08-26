@@ -1,0 +1,761 @@
+{
+  "$schema": "https://softmax.com/schemas/coworld-manifest.json",
+  "episode_timeout_minutes": 20,
+  "tags": [
+    "retro",
+    "arcade",
+    "free-for-all",
+    "real-time",
+    "llm"
+  ],
+  "game": {
+    "name": "atari-cabinet",
+    "description": "Four arcade cabinets ring a square CRT, each defending a gap in its own wall with a paddle that is also a gun; the last cabinet with lives standing wins, and the ROM rotates.",
+    "owner": "daveey",
+    "runnable": {
+      "type": "game",
+      "image": "{{ATARI_CABINET_IMAGE}}",
+      "run": [
+        "/bin/atari-cabinet"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/atari-cabinet/anthropic_api_key"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-atari-cabinet/tree/main"
+    },
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players"
+      ],
+      "properties": {
+        "tokens": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          },
+          "description": "per-slot join tokens, one per seat"
+        },
+        "players": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "slots": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "alias": {
+                "type": "string"
+              },
+              "token": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "cosmetic slot aliases; the alias a seat plays under is perm-dealt at t = 0"
+        },
+        "closedRoster": {
+          "type": "boolean",
+          "default": false
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "num_agents": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 4,
+          "description": "seats, and cabinets: always 4"
+        },
+        "minPlayers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 4
+        },
+        "maxTicks": {
+          "type": "integer",
+          "minimum": 120,
+          "maximum": 20000,
+          "default": 2880,
+          "description": "a multiple of turnTicks"
+        },
+        "maxGames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "default": 1
+        },
+        "turnTicks": {
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 600,
+          "default": 120,
+          "description": "the LLM decision cadence, in ticks"
+        },
+        "turnBudgetMs": {
+          "type": "integer",
+          "minimum": 2000,
+          "maximum": 60000,
+          "default": 16000
+        },
+        "attempt1Ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 30000,
+          "default": 9000
+        },
+        "retryMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 30000,
+          "default": 5000
+        },
+        "turnSpacingMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000,
+          "default": 12000,
+          "description": "inter-batch wall floor: 4 requests per 12 s keeps the episode under the sidecar's 30 rpm cap"
+        },
+        "wallClockBudgetSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 720,
+          "default": 660
+        },
+        "lobbyJoinTimeoutTicks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7200,
+          "default": 2880
+        },
+        "startWaitTicks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240,
+          "default": 24
+        },
+        "gameOverTicks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 480,
+          "default": 48
+        },
+        "fastMode": {
+          "type": "boolean",
+          "default": true
+        },
+        "showPlayerLabels": {
+          "type": "boolean",
+          "default": false
+        },
+        "speed": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 1
+        },
+        "model": {
+          "type": "string"
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 4000,
+          "default": 900
+        },
+        "rom": {
+          "type": "string",
+          "enum": [
+            "warlords",
+            "quadrapong",
+            "foozpong"
+          ],
+          "default": "warlords"
+        },
+        "startingLives": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "default": 3
+        },
+        "ballCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "default": 2
+        },
+        "brickRows": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 1
+        },
+        "catchEnabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "farPaddle": {
+          "type": "boolean",
+          "default": false
+        },
+        "goalHalfCu": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 30,
+          "default": 18
+        },
+        "paddleHalfCu": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 12,
+          "default": 7
+        },
+        "farPaddleHalfCu": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 12,
+          "default": 5
+        },
+        "ballSpeed0Milli": {
+          "type": "integer",
+          "minimum": 300,
+          "maximum": 900,
+          "default": 550
+        },
+        "ballSpeedStepMilli": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120,
+          "default": 35
+        },
+        "ballSpeedMaxMilli": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 1600,
+          "default": 1300
+        },
+        "holdTicksMax": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 96,
+          "default": 48
+        },
+        "serveDelayTicks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120,
+          "default": 24
+        }
+      }
+    },
+    "results_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "names",
+        "scores",
+        "win",
+        "placements",
+        "rom",
+        "reason",
+        "endRule"
+      ],
+      "properties": {
+        "names": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "aliases": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "cabinets": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "policyKinds": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "scripted"
+            ]
+          }
+        },
+        "scores": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number"
+          }
+        },
+        "win": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "placements": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "rom": {
+          "type": "string",
+          "enum": [
+            "warlords",
+            "quadrapong",
+            "foozpong"
+          ]
+        },
+        "startingLives": {
+          "type": "integer"
+        },
+        "livesLeft": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "concedes": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "knockouts": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "chips": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "saves": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "catches": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "bricksLeft": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "llmTurns": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "fallbackTurns": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "finalTick": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "deadline",
+            "fault"
+          ]
+        },
+        "endRule": {
+          "type": "string",
+          "enum": [
+            "last_standing",
+            "full_time",
+            "wall_clock",
+            "sim_fault",
+            "host_error"
+          ]
+        },
+        "seed": {
+          "type": "integer"
+        }
+      }
+    },
+    "protocols": {
+      "player": {
+        "type": "text",
+        "value": "# THE CABINET — wire protocol\n\n## The player socket\n\n`ws://<game>:8080/player?slot=<N>&token=<T>` — a bad slot or token is a **403\nbefore the upgrade**.\n\nA seat sends exactly **one kind of message it authors**: its registration, as a\nSprite v1 chat frame (`0x81`), re-sent on the first ~10 s of frames because\njoins are slot-sequential and the lobby streams frames to a socket before it is\nadmitted (the server holds an unappliable registration rather than dropping\nit):\n\n```json\n{\"type\":\"register\",\"prompt\":\"<strategy text or empty>\",\n \"scripted\":\"bulwark\"|\"spinner\"|null,\"policy\":\"<free label>\"}\n```\n\n`prompt` is capped at 4000 runes at the transport (over-long is truncated,\nnever rejected) and is **never** written to the replay or the results. A seat\nthat never registers, or registers with neither field, is `bulwark`.\n\nAfter that the seat only **receives**: one binary Sprite v1 frame per tick, and\nit answers each with the Ready packet (`0x85`). **SEATS SEND NO INPUTS.** The\nserver computes every command byte, so any input mask arriving on a player\nsocket is discarded — which is also why the Ready packet is legitimate here in\na way it is not for an ordinary client: there is no dead-reckoned input to\ncorrupt.\n\nThe per-seat frame carries the **whole board**: the arena, all four mouths\n(open or welded), every paddle, every brick and every ball with its trail.\nThe cabinet is a CRT and the physics is public. Board labels carry only the\ncolour aliases (`showPlayerLabels` is forced false on the player stream), so no\nreal policy name is ever on a seat's screen.\n\n## The board view a policy is asked about\n\nEvery 5 s of sim time (120 ticks) the server composes this object, appends it\nto the seat's `PLAYER_PROMPT` under a \"GUIDANCE FROM YOUR OPERATOR\" heading,\nand asks Claude for a stance. All numbers are in **cabinet coordinates**\n(0..100 from the bottom-left corner, x right, y up), rounded to 2 decimals,\nwith `along`/`depth` in the seat's own side-local frame.\n\n```json\n{\"turn\": 11, \"of\": 24,\n \"clock\": {\"tick\": 1320, \"of\": 2880, \"left_s\": 65.0},\n \"rom\": \"warlords\",\n \"you\": {\"alias\": \"GREEN\", \"side\": \"NORTH\", \"lives\": 2, \"out\": false,\n         \"paddle\": {\"along\": -6.40, \"vel\": 0.80, \"half\": 7.00, \"depth\": 14.00,\n                    \"travel_half\": 43.00},\n         \"far_paddle\": null, \"holding\": null,\n         \"mouth\": {\"half\": 18.00, \"open\": true},\n         \"bricks\": {\"left\": 5, \"of\": 9, \"cols\": [false, true, \"…9…\"]},\n         \"score\": 41.750},\n \"balls\": [{\"id\": \"B1\", \"state\": \"live\", \"pos\": [62.10, 71.44],\n            \"vel\": [0.61, -0.42], \"speed\": 0.74, \"deg\": 325.4,\n            \"last_touch\": \"BLUE\", \"held_by\": null,\n            \"arrive_at\": \"GREEN\", \"arrive_in_ticks\": 31,\n            \"arrive_along\": 3.20}, \"… ballCount entries …\"],\n \"rivals\": [\"… exactly three, alias / side / lives / out / bricks_left / paddle_along / score …\"],\n \"neighbours\": {\"plus_along\": \"YELLOW\", \"minus_along\": \"BLUE\"},\n \"rules\": {\"starting_lives\": 3, \"ball_count\": 2, \"brick_rows\": 1,\n           \"catch_enabled\": true, \"far_paddle\": false,\n           \"points\": {\"per_life_kept\": 20.0, \"crown\": 15.0, \"knockout\": 2.0,\n                      \"chip\": 0.5, \"save\": 0.25}},\n \"your_last_stance\": {\"…\": \"the stance this seat set last turn, or null\"}}\n```\n\n`arrive_along` is `null` when that ball will not reach **this** seat's line\ninside the prediction bound; `arrive_at` names whichever cabinet's line it\nreaches first. The `arrive_*` triple is computed by **the same walk the\nautopilot uses**, so a policy never has to guess at a quantity the engine\nalready knows.\n\n**Hidden from every seat, with no exception:** which entrant holds any other\nseat; any other seat's stance, note, say, prompt, latency, policy label or\nfallback state; `perm`; `config.seed`; the RNG state; every future serve\ndirection; every real player name; and any host or wall-clock fact.\n\n## The stance reply\n\n```json\n{\"note\": \"BLUE is on 1 life and its wall is down to 2; take the free shot\",\n \"stance\": \"aim\", \"target_ball\": \"B1\", \"aim_at\": \"BLUE\",\n \"post\": 0.0, \"lead_ticks\": 12, \"aggression\": 0.8, \"say\": \"BLUE first\"}\n```\n\n| field | cap / legal values | repair when violated |\n|---|---|---|\n| `note` | ≤ 160 runes | truncated to 160 runes |\n| `stance` | `guard, aim, camp, catch, chase` | unrecognised → last turn's, else `guard`; `catch` without `catchEnabled` → `guard` |\n| `target_ball` | ≤ 4 runes, `B1`…`B<ballCount>` or `any` | an id outside the set, or a ball not currently live → `any` |\n| `aim_at` | ≤ 8 runes, a colour alias or `none`; never my own, never an out cabinet | unrecognised / missing / self / out → `none` (the autopilot then behaves as `guard`) |\n| `post` | finite, clamped ±43.0, quantised to µu | non-finite / missing → last turn's, else `0.0`; a value beyond ±43 is read as a percent and rescaled |\n| `lead_ticks` | integer, clamped 0..48 | non-finite / missing → `12` |\n| `aggression` | finite, clamped 0..1, quantised to 0..255 | a value above 1 is divided by 100; missing → `0.8` |\n| `say` | ≤ 48 runes | truncated to 48 runes, then the printable-ASCII shout sanitiser (which strips a leading `{`) |\n\nParsing is deliberately tolerant: markdown fences are stripped, the outermost\nbalanced `{…}` is taken (so prose before or after the object is fine), numeric\nstrings are accepted, `stance`/`target_ball`/`aim_at` are matched\ncase-insensitively and inside prose (`\"the red cabinet\"`, `\"ball 2\"`), and the\ndocumented synonyms (`defend`→`guard`, `shoot`/`attack`→`aim`,\n`hold`/`sit`→`camp`, `grab`→`catch`, `rush`→`chase`) are accepted. Only when no\nobject with at least one usable field can be recovered does the single retry\nfire, and then the `bulwark` fallback.\n\n**Every recorded string is truncated on RUNE boundaries**, never bytes: a\nbyte-truncated multi-byte character renders in a browser and then fails a\nstrict UTF-8 parser.\n\n## The results document\n\n`COGAME_RESULTS_URI` receives exactly these 22 keys — the manifest's\n`results_schema` is `additionalProperties: false`, so adding or removing one\nhere means editing `coworld_manifest_template.json` in the same commit. Every\nper-seat array is in **seat order** and has exactly 4 entries; `names` are the\nreal policy names, `aliases` are the in-game ones, `cabinets` is `perm`.\n\n```json\n{\"names\": [], \"aliases\": [], \"cabinets\": [], \"policyKinds\": [], \"scores\": [],\n \"win\": [], \"placements\": [], \"rom\": \"warlords\", \"startingLives\": 3,\n \"livesLeft\": [], \"concedes\": [], \"knockouts\": [], \"chips\": [], \"saves\": [],\n \"catches\": [], \"bricksLeft\": [], \"llmTurns\": [], \"fallbackTurns\": [],\n \"finalTick\": 2604, \"reason\": \"complete\", \"endRule\": \"last_standing\",\n \"seed\": 5140913}\n```\n\n## The `/global` spectator snapshot and the replay\n\n`ws://<game>:8080/global` streams the same binary sprite protocol plus the\nbroadcast chrome JSON, which rides as the **label of a reserved never-drawn\n1×1 sprite** (id 4090) — the only channel that survives a hosted replay. The\nstate frame keeps the starter's key names (`t, mt, ph, lob, pl, sp, mx, st, lp,\nsk, ff, en, mm, bs, pov, teams, roster, events, lead, beats, lulls, over,\nhold`) so the byte-identical `chrome_common.js` runs unmodified; everything\ncabinet-specific lives under `cab` and `stances`.\n\nThe replay is the starter's **binary `COWLDCAB`** format:\n\n| content | carries |\n|---|---|\n| header | magic `COWLDCAB`, format version, `gameName` `atari-cabinet`, `gameVersion` |\n| config JSON | `seed`, `rom`, the fully resolved ROM preset, `perm`, `num_agents`, `maxTicks`, `turnTicks`, the whole geometry table, the reward constants, `players[].name` (real names), `slots[].alias`, `fastMode` |\n| joins / leaves | per seat: name, slot, token |\n| inputs | **the action log**: one command byte per seat per tick, written on change only |\n| chats | `register` / `stance` / `fallback` / `budget_guard` / `result` control records |\n| hashes | one `gameHash` per tick |\n\n`tools/replay_summary.py` (Python 3 stdlib only) turns those bytes into one\nstrict-UTF-8 JSON object for forensics, and `/replay-data` serves them back\nfrom a replay-mode server.\n\n## Runtime contract\n\n`COGAME_CONFIG_URI`, `COGAME_RESULTS_URI`, `COGAME_SAVE_REPLAY_URI`,\n`COGAME_LOAD_REPLAY_URI`, `COGAME_PLAYER_FAILURE_URI`, `COGAME_EVENTS_URI`,\n`COGAME_METRICS_URI`, `COGAME_HOST`, `COGAME_PORT` — the starter's, unchanged.\n`GET /healthz` and `GET /global` keep answering for a bounded ~20 s after the\nartifacts are written, because the episode runner pings `/global` with a 2 s\ndeadline *after* the player pods start and a short episode can already be gone.\n"
+      },
+      "global": {
+        "type": "text",
+        "value": "# THE CABINET — wire protocol\n\n## The player socket\n\n`ws://<game>:8080/player?slot=<N>&token=<T>` — a bad slot or token is a **403\nbefore the upgrade**.\n\nA seat sends exactly **one kind of message it authors**: its registration, as a\nSprite v1 chat frame (`0x81`), re-sent on the first ~10 s of frames because\njoins are slot-sequential and the lobby streams frames to a socket before it is\nadmitted (the server holds an unappliable registration rather than dropping\nit):\n\n```json\n{\"type\":\"register\",\"prompt\":\"<strategy text or empty>\",\n \"scripted\":\"bulwark\"|\"spinner\"|null,\"policy\":\"<free label>\"}\n```\n\n`prompt` is capped at 4000 runes at the transport (over-long is truncated,\nnever rejected) and is **never** written to the replay or the results. A seat\nthat never registers, or registers with neither field, is `bulwark`.\n\nAfter that the seat only **receives**: one binary Sprite v1 frame per tick, and\nit answers each with the Ready packet (`0x85`). **SEATS SEND NO INPUTS.** The\nserver computes every command byte, so any input mask arriving on a player\nsocket is discarded — which is also why the Ready packet is legitimate here in\na way it is not for an ordinary client: there is no dead-reckoned input to\ncorrupt.\n\nThe per-seat frame carries the **whole board**: the arena, all four mouths\n(open or welded), every paddle, every brick and every ball with its trail.\nThe cabinet is a CRT and the physics is public. Board labels carry only the\ncolour aliases (`showPlayerLabels` is forced false on the player stream), so no\nreal policy name is ever on a seat's screen.\n\n## The board view a policy is asked about\n\nEvery 5 s of sim time (120 ticks) the server composes this object, appends it\nto the seat's `PLAYER_PROMPT` under a \"GUIDANCE FROM YOUR OPERATOR\" heading,\nand asks Claude for a stance. All numbers are in **cabinet coordinates**\n(0..100 from the bottom-left corner, x right, y up), rounded to 2 decimals,\nwith `along`/`depth` in the seat's own side-local frame.\n\n```json\n{\"turn\": 11, \"of\": 24,\n \"clock\": {\"tick\": 1320, \"of\": 2880, \"left_s\": 65.0},\n \"rom\": \"warlords\",\n \"you\": {\"alias\": \"GREEN\", \"side\": \"NORTH\", \"lives\": 2, \"out\": false,\n         \"paddle\": {\"along\": -6.40, \"vel\": 0.80, \"half\": 7.00, \"depth\": 14.00,\n                    \"travel_half\": 43.00},\n         \"far_paddle\": null, \"holding\": null,\n         \"mouth\": {\"half\": 18.00, \"open\": true},\n         \"bricks\": {\"left\": 5, \"of\": 9, \"cols\": [false, true, \"…9…\"]},\n         \"score\": 41.750},\n \"balls\": [{\"id\": \"B1\", \"state\": \"live\", \"pos\": [62.10, 71.44],\n            \"vel\": [0.61, -0.42], \"speed\": 0.74, \"deg\": 325.4,\n            \"last_touch\": \"BLUE\", \"held_by\": null,\n            \"arrive_at\": \"GREEN\", \"arrive_in_ticks\": 31,\n            \"arrive_along\": 3.20}, \"… ballCount entries …\"],\n \"rivals\": [\"… exactly three, alias / side / lives / out / bricks_left / paddle_along / score …\"],\n \"neighbours\": {\"plus_along\": \"YELLOW\", \"minus_along\": \"BLUE\"},\n \"rules\": {\"starting_lives\": 3, \"ball_count\": 2, \"brick_rows\": 1,\n           \"catch_enabled\": true, \"far_paddle\": false,\n           \"points\": {\"per_life_kept\": 20.0, \"crown\": 15.0, \"knockout\": 2.0,\n                      \"chip\": 0.5, \"save\": 0.25}},\n \"your_last_stance\": {\"…\": \"the stance this seat set last turn, or null\"}}\n```\n\n`arrive_along` is `null` when that ball will not reach **this** seat's line\ninside the prediction bound; `arrive_at` names whichever cabinet's line it\nreaches first. The `arrive_*` triple is computed by **the same walk the\nautopilot uses**, so a policy never has to guess at a quantity the engine\nalready knows.\n\n**Hidden from every seat, with no exception:** which entrant holds any other\nseat; any other seat's stance, note, say, prompt, latency, policy label or\nfallback state; `perm`; `config.seed`; the RNG state; every future serve\ndirection; every real player name; and any host or wall-clock fact.\n\n## The stance reply\n\n```json\n{\"note\": \"BLUE is on 1 life and its wall is down to 2; take the free shot\",\n \"stance\": \"aim\", \"target_ball\": \"B1\", \"aim_at\": \"BLUE\",\n \"post\": 0.0, \"lead_ticks\": 12, \"aggression\": 0.8, \"say\": \"BLUE first\"}\n```\n\n| field | cap / legal values | repair when violated |\n|---|---|---|\n| `note` | ≤ 160 runes | truncated to 160 runes |\n| `stance` | `guard, aim, camp, catch, chase` | unrecognised → last turn's, else `guard`; `catch` without `catchEnabled` → `guard` |\n| `target_ball` | ≤ 4 runes, `B1`…`B<ballCount>` or `any` | an id outside the set, or a ball not currently live → `any` |\n| `aim_at` | ≤ 8 runes, a colour alias or `none`; never my own, never an out cabinet | unrecognised / missing / self / out → `none` (the autopilot then behaves as `guard`) |\n| `post` | finite, clamped ±43.0, quantised to µu | non-finite / missing → last turn's, else `0.0`; a value beyond ±43 is read as a percent and rescaled |\n| `lead_ticks` | integer, clamped 0..48 | non-finite / missing → `12` |\n| `aggression` | finite, clamped 0..1, quantised to 0..255 | a value above 1 is divided by 100; missing → `0.8` |\n| `say` | ≤ 48 runes | truncated to 48 runes, then the printable-ASCII shout sanitiser (which strips a leading `{`) |\n\nParsing is deliberately tolerant: markdown fences are stripped, the outermost\nbalanced `{…}` is taken (so prose before or after the object is fine), numeric\nstrings are accepted, `stance`/`target_ball`/`aim_at` are matched\ncase-insensitively and inside prose (`\"the red cabinet\"`, `\"ball 2\"`), and the\ndocumented synonyms (`defend`→`guard`, `shoot`/`attack`→`aim`,\n`hold`/`sit`→`camp`, `grab`→`catch`, `rush`→`chase`) are accepted. Only when no\nobject with at least one usable field can be recovered does the single retry\nfire, and then the `bulwark` fallback.\n\n**Every recorded string is truncated on RUNE boundaries**, never bytes: a\nbyte-truncated multi-byte character renders in a browser and then fails a\nstrict UTF-8 parser.\n\n## The results document\n\n`COGAME_RESULTS_URI` receives exactly these 22 keys — the manifest's\n`results_schema` is `additionalProperties: false`, so adding or removing one\nhere means editing `coworld_manifest_template.json` in the same commit. Every\nper-seat array is in **seat order** and has exactly 4 entries; `names` are the\nreal policy names, `aliases` are the in-game ones, `cabinets` is `perm`.\n\n```json\n{\"names\": [], \"aliases\": [], \"cabinets\": [], \"policyKinds\": [], \"scores\": [],\n \"win\": [], \"placements\": [], \"rom\": \"warlords\", \"startingLives\": 3,\n \"livesLeft\": [], \"concedes\": [], \"knockouts\": [], \"chips\": [], \"saves\": [],\n \"catches\": [], \"bricksLeft\": [], \"llmTurns\": [], \"fallbackTurns\": [],\n \"finalTick\": 2604, \"reason\": \"complete\", \"endRule\": \"last_standing\",\n \"seed\": 5140913}\n```\n\n## The `/global` spectator snapshot and the replay\n\n`ws://<game>:8080/global` streams the same binary sprite protocol plus the\nbroadcast chrome JSON, which rides as the **label of a reserved never-drawn\n1×1 sprite** (id 4090) — the only channel that survives a hosted replay. The\nstate frame keeps the starter's key names (`t, mt, ph, lob, pl, sp, mx, st, lp,\nsk, ff, en, mm, bs, pov, teams, roster, events, lead, beats, lulls, over,\nhold`) so the byte-identical `chrome_common.js` runs unmodified; everything\ncabinet-specific lives under `cab` and `stances`.\n\nThe replay is the starter's **binary `COWLDCAB`** format:\n\n| content | carries |\n|---|---|\n| header | magic `COWLDCAB`, format version, `gameName` `atari-cabinet`, `gameVersion` |\n| config JSON | `seed`, `rom`, the fully resolved ROM preset, `perm`, `num_agents`, `maxTicks`, `turnTicks`, the whole geometry table, the reward constants, `players[].name` (real names), `slots[].alias`, `fastMode` |\n| joins / leaves | per seat: name, slot, token |\n| inputs | **the action log**: one command byte per seat per tick, written on change only |\n| chats | `register` / `stance` / `fallback` / `budget_guard` / `result` control records |\n| hashes | one `gameHash` per tick |\n\n`tools/replay_summary.py` (Python 3 stdlib only) turns those bytes into one\nstrict-UTF-8 JSON object for forensics, and `/replay-data` serves them back\nfrom a replay-mode server.\n\n## Runtime contract\n\n`COGAME_CONFIG_URI`, `COGAME_RESULTS_URI`, `COGAME_SAVE_REPLAY_URI`,\n`COGAME_LOAD_REPLAY_URI`, `COGAME_PLAYER_FAILURE_URI`, `COGAME_EVENTS_URI`,\n`COGAME_METRICS_URI`, `COGAME_HOST`, `COGAME_PORT` — the starter's, unchanged.\n`GET /healthz` and `GET /global` keep answering for a bounded ~20 s after the\nartifacts are written, because the episode runner pings `/global` with a 2 s\ndeadline *after* the player pods start and a short episode can already be gone.\n\n\n---\n\n# THE CABINET — rules\n\nFour cabinets, one square CRT, two balls, two minutes.\n\nThe arena is a **100 × 100** box. Each of the four sides belongs to one\ncabinet. In the middle of your side is your **mouth** — a gap in the wall. In\nfront of it, 14 units into the arena, is your **paddle**: a bar that slides\nleft and right along your own side and nothing else. Between them, in the\n`warlords` ROM, is your **castle**: nine bricks across the mouth.\n\nThe ball bounces off the solid parts of every wall, off every paddle, and off\nevery brick — chipping the brick away. When a ball crosses your mouth line\ninside the gap you **lose a life** and the ball is re-served from the centre.\nLose your last life and your mouth is welded shut, your paddle and castle are\nremoved, and the other cabinets fight on in a smaller box. **The last cabinet\nwith lives standing wins.**\n\nEvery deflection speeds the ball up. Where the ball leaves your paddle depends\non **where on the bar it landed** and **which way the bar was moving** —\nthirteen outgoing angles, 11.25° apart. That is the whole strategy: a paddle is\nnot only a shield, it is a **gun**, and every rally is a choice about **whom to\nshoot at**.\n\n## Seats and sides\n\n`num_agents` is **4**, in every variant and in the certification fixture. One\nseat = one cabinet = one side of the box.\n\n| side `k` | wall | alias | chrome key |\n|---|---|---|---|\n| 0 | SOUTH (`Y = 0`) | **RED** | `red` |\n| 1 | EAST (`X = 100`) | **BLUE** | `blue` |\n| 2 | NORTH (`Y = 100`) | **GREEN** | `green` |\n| 3 | WEST (`X = 0`) | **YELLOW** | `yellow` |\n\nSeat `s` drives cabinet `perm[s]`, where `perm` is a permutation of `0..3`\ndrawn once at `t = 0` from `config.seed`. In-game a cabinet is called by its\n**colour alias** and nothing else; real policy names are spectator-side only.\n`perm` is written into the replay config JSON and into `results.cabinets`, and\nis never visible to any seat. Your **+along** end touches the next cabinet\ncounter-clockwise: RED → BLUE → GREEN → YELLOW → RED.\n\n## The ROM preset table (the rotation)\n\nOne engine, three presets, applied `defaults → the named preset → any\nexplicitly supplied key`.\n\n| config key | `warlords` | `quadrapong` | `foozpong` | meaning |\n|---|---|---|---|---|\n| `startingLives` | **3** | **5** | **3** | lives per cabinet |\n| `ballCount` | **2** | **2** | **2** | balls live at once |\n| `brickRows` | **1** | **0** | **0** | rows of 9 bricks across each mouth |\n| `catchEnabled` | **true** | false | false | a paddle may grip and hold a ball |\n| `farPaddle` | false | false | **true** | a second paddle row at depth 34 |\n| `goalHalfCu` | **18** | **22** | **18** | half-width of the mouth |\n| `paddleHalfCu` | **7** | **6** | **6** | half-length of the near paddle |\n| `farPaddleHalfCu` | — | — | **5** | half-length of the far paddle |\n| `ballSpeed0Milli` | **550** | **650** | **600** | serve speed, thousandths of a cu/tick |\n\nEverything else — arena size, depths, brick geometry, the speed ramp, the\ntimings, the decision cadence, the wall-clock budget and `num_agents` — is\nidentical across all three ROMs, which is what makes one score scale and one\nwall-clock budget correct for all of them.\n\n## Geometry and constants (fixed in every ROM and every episode)\n\n```\nArenaSide         = 1 000 000 µu  (100.00 cu, 1 cu = 10 000 µu)\nBallHalf          =    12 000 µu  (  1.20 cu)  -- an axis-aligned square\nPaddleDepth       =   140 000 µu  ( 14.00 cu)\nPaddleThickHalf   =     8 000 µu  (  0.80 cu)\nFarPaddleDepth    =   340 000 µu  ( 34.00 cu)  -- foozpong only\nPaddleTravelHalf  =   430 000 µu  ( 43.00 cu)\nPaddleStepSpeed   =     4 000 µu/tick (0.40 cu/tick)  -- one drive level\nPaddleMaxSpeed    =    16 000 µu/tick (1.60 cu/tick)  -- level 4\nBrickRowDepthLo   =    80 000 µu  (  8.00 cu)\nBrickRowDepthHi   =   105 000 µu  ( 10.50 cu)\nBricksPerRow      = 9             -- centres at along -16, -12, … +16 cu\nBrickHalfWidth    =    18 000 µu  (  1.80 cu)  -- 3.60 cu wide, 0.40 cu gaps\nBallSpeedStep     =       350 µu/tick per deflection\nBallSpeedMax      =    13 000 µu/tick (1.30 cu/tick = 31.2 cu/s)\nServeDelayTicks   = 24            -- 1.0 s of dead air after a concede\nHoldTicksMax      = 48            -- 2.0 s, the longest a catch may hold\nOutfanAngles      = 13            -- 22.5° … 157.5°, 11.25° apart\nmaxTicks          = 2880  (120.0 s)   -- 24 decision turns\nturnTicks         =  120  (  5.0 s)   -- the decision cadence\n```\n\n`PaddleMaxSpeed` exceeds `BallSpeedMax`, so a paddle can always out-run the\nball along its own side: **a miss is a decision, never a physics limitation.**\n\n## Resolution order (every tick, no exceptions)\n\n1. **Turn boundary.** At `t mod 120 == 0` the stances collected for this turn\n   become each seat's standing stance and one `stance` record per seat is\n   written into the replay.\n2. **Autopilot compile**, in cabinet index order, into a **command byte**\n   `cmd ∈ 0 … 242`: `near = cmd mod 9`, `far = (cmd div 9) mod 9`,\n   `grip = cmd div 81`, paddle velocity `= (level − 4) × PaddleStepSpeed`.\n   `cmd >= 243` is repaired to `40` in both the server and the replay runtime.\n3. **Paddle motion**, cabinet order, near then far; a paddle that hits its\n   travel limit simply stops.\n4. **Ball motion and contacts**, ball order, at most **one contact per ball\n   per tick**, earliest first, ties broken **paddles → bricks → mouth lines →\n   solid walls**.\n5. **Score**, folded into a running total.\n6. **Hash** — one `gameHash` per tick, the integrity chain the browser checks.\n7. **End checks**: last standing → `complete/last_standing`; the wall-clock\n   stop → `deadline/wall_clock`; `maxTicks` → `complete/full_time`; an\n   invariant guard → `fault/sim_fault`.\n\n**The deflection fan.** In side `k`'s local frame,\n`j = clamp(round(offset × 6 / paddleHalf) + spin, −6, +6)` and\n`dl' = 16 − 2j`, so `dl'` is always in `4 … 28`: **a paddle can never deflect a\nball into its own mouth.** `spin` is `±2` above 1.20 cu/tick of bar speed,\n`±1` above 0.40, else 0. A gripped ball is **aimed by the drive level in the\nbyte that releases it** (`j = near − 4`), so the release rides the same\nrecorded byte as everything else.\n\n## Scoring\n\nEvery term is non-negative, so the minimum score is `0.000` and higher is\nalways better. Conceding is punished by *not earning* the lives term.\n\n```\nscore[k] = 20.00 × livesLeft[k] / startingLives × 3   (60.000 max, ROM-independent)\n         + 15.000 if placement == 1                   (the crown)\n         +  2.000 × knockouts[k]                      (rival lives you took)\n         +  0.500 × chips[k]                          (rival bricks your ball broke)\n         +  0.250 × saves[k]                          (balls your paddles deflected)\n```\n\nThe lives term is normalised by `startingLives`, so `quadrapong`'s five lives\nand `warlords`' three are worth the same at the top of the scale and a league\nboard that mixes ROMs is still meaningful.\n\n**Placement**, computed once at game over: a cabinet with lives outranks every\ncabinet with none; among the living, more lives, then more bricks, then more\nsaves, then the lower cabinet index; among the eliminated, later `outTick`,\nthen more knockouts, then the lower cabinet index. The index tiebreak makes the\nchain total, so `placements` is always a strict permutation of `1..4` and\nexactly one seat takes the crown.\n\n**What the league ranks by: the seat's mean `results.scores` value across its\nepisodes.**\n\n## End conditions\n\n| `reason` | `endRule` | when |\n|---|---|---|\n| `complete` | `last_standing` | exactly one cabinet still has lives |\n| `complete` | `full_time` | 2880 ticks reached with two or more alive |\n| `deadline` | `wall_clock` | the 660 s engine stop elapsed first — the board is scored as it stands |\n| `fault` | `sim_fault` | an invariant guard tripped; a partial replay is written |\n| `fault` | `host_error` | an unexpected server-side exception |\n\nA seat that never connects does **not** end the episode: the lobby budget\nexpires, the no-show is reported to `COGAME_PLAYER_FAILURE_URI`, and its\ncabinet plays the `bulwark` baseline for the whole run.\n\n## Out of scope\n\nNo Atari emulator, no ROM image, no ALE binding and no PettingZoo dependency:\nthe environment names in the source idea are provenance, not a specification,\nand every constant here is the cabinet's own. No pixel or RAM observations, no\nteam or cooperative motive, no ball–ball collision, no powerups, no inter-seat\ncommunication of any kind, and no fog of war — the cabinet is a CRT and the\nphysics is public. What is hidden is *who is playing*.\n"
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "text",
+        "value": "# THE CABINET (`cogame-atari-cabinet`)\n\n**Four arcade cabinets ring a square CRT, each defending a gap in its own wall\nwith a paddle that is also a gun; the last cabinet with lives standing wins,\nand the ROM rotates.**\n\nFour cabinets sit on the four sides of a 100 × 100 box. Each one owns a\n**mouth** in its own wall, a **paddle** that slides in front of it, and (ROM\npermitting) a **brick castle** in between. Two balls rip around the box at\nrising speed. Every ball that gets through your mouth costs you a life; run out\nand your mouth is welded shut. Which of the three ROMs is loaded —\n`warlords`, `quadrapong`, `foozpong` — is a manifest variant, announced before\nthe round, stamped into the replay and printed on the scorebug.\n\nWhere the ball leaves your paddle depends on **where on the bar it landed** and\n**which way the bar was moving**: thirteen outgoing angles, 11.25° apart. That\nis the whole strategy. A paddle is not only a shield, it is a gun, and every\nrally is a choice about whom to shoot at.\n\n* Rules and every constant: [docs/RULES.md](docs/RULES.md)\n* Wire protocol, the board view and the results document:\n  [docs/PROTOCOL.md](docs/PROTOCOL.md)\n* Writing a policy: [docs/STANCES.md](docs/STANCES.md)\n* The design note this repo implements:\n  [docs/plans/2026-08-26-atari-cabinet-design.md](docs/plans/2026-08-26-atari-cabinet-design.md)\n\n## A policy is just a prompt\n\nEvery 5 s of sim time the **game server** — not the player container — asks\nClaude for one JSON object per living cabinet, all of them in **one parallel\nbatch** (this is a simultaneous-decision game). A deterministic autopilot turns\nthe standing stance into one **command byte** per cabinet per tick at 24 Hz;\nthat byte is the action, the byte is what the replay records, and the byte is\nwhat the browser replays.\n\n```bash\ncoworld upload-policy coworld-atari-cabinet:latest \\\n  --name my-cabinet --run /bin/atari-cabinet-player \\\n  --secret-env PLAYER_PROMPT=\"Defend first: if any ball reaches your line\ninside 48 ticks, guard it. Otherwise aim at the alive rival with the fewest\nlives. Never post wider than +/-12.\"\n```\n\nThe same image also ships two scripted baselines, selected by env var, so an\nLLM policy and a scripted one are byte-identical apart from their environment:\n\n| env | seat |\n|---|---|\n| `PLAYER_PROMPT=<strategy>` | an LLM seat |\n| `PLAYER_SCRIPTED=bulwark` | the certification player, the per-turn fallback and the default |\n| `PLAYER_SCRIPTED=spinner` | the chaotic filler: chases everything, never camps |\n\n## Watching it\n\nThe replay is a **static file plus a browser wasm viewer** — never a pod. The\nsame `src/cabinet/sim.nim` the server ran is compiled to wasm32 and re-steps\nthe episode from the recorded command bytes, re-checking the recorded\n`gameHash` **every tick**; one divergent bit is surfaced as a mismatch tick in\nthe chrome. The board is a CRT: scanlines, four tinted walls, chunky bricks,\nthick bars with a bright leading edge, balls with motion trails, and a dashed\n**aim ray** from each cabinet toward whatever it told the autopilot to shoot\nat — which is where you see the LLM playing.\n\n```bash\ntools/build_replay_viewer.sh \"$PWD/dist/static-replay-viewer\"\nnode tools/ci/viewer_smoke.mjs --bundle dist/static-replay-viewer \\\n  --replay dist/smoke/replay.json --strict-text-bounds\npython3 tools/replay_summary.py episode.replay | jq .\n```\n\n## Layout\n\n```\nsrc/atari_cabinet.nim         the game server entrypoint (seed randomised BEFORE config.update)\nsrc/atari_cabinet_player.nim  the thin seat registrar -> /bin/atari-cabinet-player\nsrc/cabinet/                  sim_types, trig, arena, rom, sim_config, sim_state, sim,\n                              roster, stances, control, baselines, llm, decide, events,\n                              labels, global, broadcast, wire_constants, replays,\n                              replay_runtime, server\nreplay-viewer/                the wasm entry + the emscripten link flags + the shell JS\nclient/                       the broadcast chrome (chrome_common.js is byte-identical\n                              to coworld-ctf's; replay_broadcast.html is its page plus\n                              an appended ATARI-CABINET block)\ntests/                        16 suites; ci.yml runs every one in debug AND release\ntools/                        the replay-viewer build hook, the baseline tuner, the\n                              replay summariser and the CI scaffold\n```\n\n## Building and testing\n\nThe sandbox that authored this repo has no Docker, no Nim and no emsdk: **CI is\nthe only harness**, and `.github/workflows/ci.yml` is the verdict.\n\n```bash\nnim r --path:src tests/test_physics.nim      # any suite, debug\nnim r -d:release --path:src tests/test_determinism.nim\ndocker build -t coworld-atari-cabinet:ci . && ./tools/ci/docker_smoke.sh coworld-atari-cabinet:ci\n```\n\n## Determinism\n\nThe whole sim runs in **integers** — micro-units (1 cu = 10 000 µu), a\ncommitted 64-entry direction table, and box-vs-box contacts resolved by integer\ncross-multiplication in `int64`. There is no square root, no trigonometry and\n**no floating point at all** under\n`src/cabinet/{sim,arena,rom,trig,sim_types,sim_config,sim_state}.nim`\n(grep-enforced by `tests/test_determinism.nim`), because the replay viewer is a\n**wasm32** build of the same module the **amd64** server ran and their per-tick\nhash chains must match bit-for-bit. The autopilot and the renderer sit outside\nthat boundary and may use floats: only the recorded bytes cross it.\n"
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "Rules",
+          "content": {
+            "type": "text",
+            "value": "# THE CABINET — rules\n\nFour cabinets, one square CRT, two balls, two minutes.\n\nThe arena is a **100 × 100** box. Each of the four sides belongs to one\ncabinet. In the middle of your side is your **mouth** — a gap in the wall. In\nfront of it, 14 units into the arena, is your **paddle**: a bar that slides\nleft and right along your own side and nothing else. Between them, in the\n`warlords` ROM, is your **castle**: nine bricks across the mouth.\n\nThe ball bounces off the solid parts of every wall, off every paddle, and off\nevery brick — chipping the brick away. When a ball crosses your mouth line\ninside the gap you **lose a life** and the ball is re-served from the centre.\nLose your last life and your mouth is welded shut, your paddle and castle are\nremoved, and the other cabinets fight on in a smaller box. **The last cabinet\nwith lives standing wins.**\n\nEvery deflection speeds the ball up. Where the ball leaves your paddle depends\non **where on the bar it landed** and **which way the bar was moving** —\nthirteen outgoing angles, 11.25° apart. That is the whole strategy: a paddle is\nnot only a shield, it is a **gun**, and every rally is a choice about **whom to\nshoot at**.\n\n## Seats and sides\n\n`num_agents` is **4**, in every variant and in the certification fixture. One\nseat = one cabinet = one side of the box.\n\n| side `k` | wall | alias | chrome key |\n|---|---|---|---|\n| 0 | SOUTH (`Y = 0`) | **RED** | `red` |\n| 1 | EAST (`X = 100`) | **BLUE** | `blue` |\n| 2 | NORTH (`Y = 100`) | **GREEN** | `green` |\n| 3 | WEST (`X = 0`) | **YELLOW** | `yellow` |\n\nSeat `s` drives cabinet `perm[s]`, where `perm` is a permutation of `0..3`\ndrawn once at `t = 0` from `config.seed`. In-game a cabinet is called by its\n**colour alias** and nothing else; real policy names are spectator-side only.\n`perm` is written into the replay config JSON and into `results.cabinets`, and\nis never visible to any seat. Your **+along** end touches the next cabinet\ncounter-clockwise: RED → BLUE → GREEN → YELLOW → RED.\n\n## The ROM preset table (the rotation)\n\nOne engine, three presets, applied `defaults → the named preset → any\nexplicitly supplied key`.\n\n| config key | `warlords` | `quadrapong` | `foozpong` | meaning |\n|---|---|---|---|---|\n| `startingLives` | **3** | **5** | **3** | lives per cabinet |\n| `ballCount` | **2** | **2** | **2** | balls live at once |\n| `brickRows` | **1** | **0** | **0** | rows of 9 bricks across each mouth |\n| `catchEnabled` | **true** | false | false | a paddle may grip and hold a ball |\n| `farPaddle` | false | false | **true** | a second paddle row at depth 34 |\n| `goalHalfCu` | **18** | **22** | **18** | half-width of the mouth |\n| `paddleHalfCu` | **7** | **6** | **6** | half-length of the near paddle |\n| `farPaddleHalfCu` | — | — | **5** | half-length of the far paddle |\n| `ballSpeed0Milli` | **550** | **650** | **600** | serve speed, thousandths of a cu/tick |\n\nEverything else — arena size, depths, brick geometry, the speed ramp, the\ntimings, the decision cadence, the wall-clock budget and `num_agents` — is\nidentical across all three ROMs, which is what makes one score scale and one\nwall-clock budget correct for all of them.\n\n## Geometry and constants (fixed in every ROM and every episode)\n\n```\nArenaSide         = 1 000 000 µu  (100.00 cu, 1 cu = 10 000 µu)\nBallHalf          =    12 000 µu  (  1.20 cu)  -- an axis-aligned square\nPaddleDepth       =   140 000 µu  ( 14.00 cu)\nPaddleThickHalf   =     8 000 µu  (  0.80 cu)\nFarPaddleDepth    =   340 000 µu  ( 34.00 cu)  -- foozpong only\nPaddleTravelHalf  =   430 000 µu  ( 43.00 cu)\nPaddleStepSpeed   =     4 000 µu/tick (0.40 cu/tick)  -- one drive level\nPaddleMaxSpeed    =    16 000 µu/tick (1.60 cu/tick)  -- level 4\nBrickRowDepthLo   =    80 000 µu  (  8.00 cu)\nBrickRowDepthHi   =   105 000 µu  ( 10.50 cu)\nBricksPerRow      = 9             -- centres at along -16, -12, … +16 cu\nBrickHalfWidth    =    18 000 µu  (  1.80 cu)  -- 3.60 cu wide, 0.40 cu gaps\nBallSpeedStep     =       350 µu/tick per deflection\nBallSpeedMax      =    13 000 µu/tick (1.30 cu/tick = 31.2 cu/s)\nServeDelayTicks   = 24            -- 1.0 s of dead air after a concede\nHoldTicksMax      = 48            -- 2.0 s, the longest a catch may hold\nOutfanAngles      = 13            -- 22.5° … 157.5°, 11.25° apart\nmaxTicks          = 2880  (120.0 s)   -- 24 decision turns\nturnTicks         =  120  (  5.0 s)   -- the decision cadence\n```\n\n`PaddleMaxSpeed` exceeds `BallSpeedMax`, so a paddle can always out-run the\nball along its own side: **a miss is a decision, never a physics limitation.**\n\n## Resolution order (every tick, no exceptions)\n\n1. **Turn boundary.** At `t mod 120 == 0` the stances collected for this turn\n   become each seat's standing stance and one `stance` record per seat is\n   written into the replay.\n2. **Autopilot compile**, in cabinet index order, into a **command byte**\n   `cmd ∈ 0 … 242`: `near = cmd mod 9`, `far = (cmd div 9) mod 9`,\n   `grip = cmd div 81`, paddle velocity `= (level − 4) × PaddleStepSpeed`.\n   `cmd >= 243` is repaired to `40` in both the server and the replay runtime.\n3. **Paddle motion**, cabinet order, near then far; a paddle that hits its\n   travel limit simply stops.\n4. **Ball motion and contacts**, ball order, at most **one contact per ball\n   per tick**, earliest first, ties broken **paddles → bricks → mouth lines →\n   solid walls**.\n5. **Score**, folded into a running total.\n6. **Hash** — one `gameHash` per tick, the integrity chain the browser checks.\n7. **End checks**: last standing → `complete/last_standing`; the wall-clock\n   stop → `deadline/wall_clock`; `maxTicks` → `complete/full_time`; an\n   invariant guard → `fault/sim_fault`.\n\n**The deflection fan.** In side `k`'s local frame,\n`j = clamp(round(offset × 6 / paddleHalf) + spin, −6, +6)` and\n`dl' = 16 − 2j`, so `dl'` is always in `4 … 28`: **a paddle can never deflect a\nball into its own mouth.** `spin` is `±2` above 1.20 cu/tick of bar speed,\n`±1` above 0.40, else 0. A gripped ball is **aimed by the drive level in the\nbyte that releases it** (`j = near − 4`), so the release rides the same\nrecorded byte as everything else.\n\n## Scoring\n\nEvery term is non-negative, so the minimum score is `0.000` and higher is\nalways better. Conceding is punished by *not earning* the lives term.\n\n```\nscore[k] = 20.00 × livesLeft[k] / startingLives × 3   (60.000 max, ROM-independent)\n         + 15.000 if placement == 1                   (the crown)\n         +  2.000 × knockouts[k]                      (rival lives you took)\n         +  0.500 × chips[k]                          (rival bricks your ball broke)\n         +  0.250 × saves[k]                          (balls your paddles deflected)\n```\n\nThe lives term is normalised by `startingLives`, so `quadrapong`'s five lives\nand `warlords`' three are worth the same at the top of the scale and a league\nboard that mixes ROMs is still meaningful.\n\n**Placement**, computed once at game over: a cabinet with lives outranks every\ncabinet with none; among the living, more lives, then more bricks, then more\nsaves, then the lower cabinet index; among the eliminated, later `outTick`,\nthen more knockouts, then the lower cabinet index. The index tiebreak makes the\nchain total, so `placements` is always a strict permutation of `1..4` and\nexactly one seat takes the crown.\n\n**What the league ranks by: the seat's mean `results.scores` value across its\nepisodes.**\n\n## End conditions\n\n| `reason` | `endRule` | when |\n|---|---|---|\n| `complete` | `last_standing` | exactly one cabinet still has lives |\n| `complete` | `full_time` | 2880 ticks reached with two or more alive |\n| `deadline` | `wall_clock` | the 660 s engine stop elapsed first — the board is scored as it stands |\n| `fault` | `sim_fault` | an invariant guard tripped; a partial replay is written |\n| `fault` | `host_error` | an unexpected server-side exception |\n\nA seat that never connects does **not** end the episode: the lobby budget\nexpires, the no-show is reported to `COGAME_PLAYER_FAILURE_URI`, and its\ncabinet plays the `bulwark` baseline for the whole run.\n\n## Out of scope\n\nNo Atari emulator, no ROM image, no ALE binding and no PettingZoo dependency:\nthe environment names in the source idea are provenance, not a specification,\nand every constant here is the cabinet's own. No pixel or RAM observations, no\nteam or cooperative motive, no ball–ball collision, no powerups, no inter-seat\ncommunication of any kind, and no fog of war — the cabinet is a CRT and the\nphysics is public. What is hidden is *who is playing*.\n"
+          }
+        },
+        {
+          "id": "protocol.md",
+          "title": "Wire protocol",
+          "content": {
+            "type": "text",
+            "value": "# THE CABINET — wire protocol\n\n## The player socket\n\n`ws://<game>:8080/player?slot=<N>&token=<T>` — a bad slot or token is a **403\nbefore the upgrade**.\n\nA seat sends exactly **one kind of message it authors**: its registration, as a\nSprite v1 chat frame (`0x81`), re-sent on the first ~10 s of frames because\njoins are slot-sequential and the lobby streams frames to a socket before it is\nadmitted (the server holds an unappliable registration rather than dropping\nit):\n\n```json\n{\"type\":\"register\",\"prompt\":\"<strategy text or empty>\",\n \"scripted\":\"bulwark\"|\"spinner\"|null,\"policy\":\"<free label>\"}\n```\n\n`prompt` is capped at 4000 runes at the transport (over-long is truncated,\nnever rejected) and is **never** written to the replay or the results. A seat\nthat never registers, or registers with neither field, is `bulwark`.\n\nAfter that the seat only **receives**: one binary Sprite v1 frame per tick, and\nit answers each with the Ready packet (`0x85`). **SEATS SEND NO INPUTS.** The\nserver computes every command byte, so any input mask arriving on a player\nsocket is discarded — which is also why the Ready packet is legitimate here in\na way it is not for an ordinary client: there is no dead-reckoned input to\ncorrupt.\n\nThe per-seat frame carries the **whole board**: the arena, all four mouths\n(open or welded), every paddle, every brick and every ball with its trail.\nThe cabinet is a CRT and the physics is public. Board labels carry only the\ncolour aliases (`showPlayerLabels` is forced false on the player stream), so no\nreal policy name is ever on a seat's screen.\n\n## The board view a policy is asked about\n\nEvery 5 s of sim time (120 ticks) the server composes this object, appends it\nto the seat's `PLAYER_PROMPT` under a \"GUIDANCE FROM YOUR OPERATOR\" heading,\nand asks Claude for a stance. All numbers are in **cabinet coordinates**\n(0..100 from the bottom-left corner, x right, y up), rounded to 2 decimals,\nwith `along`/`depth` in the seat's own side-local frame.\n\n```json\n{\"turn\": 11, \"of\": 24,\n \"clock\": {\"tick\": 1320, \"of\": 2880, \"left_s\": 65.0},\n \"rom\": \"warlords\",\n \"you\": {\"alias\": \"GREEN\", \"side\": \"NORTH\", \"lives\": 2, \"out\": false,\n         \"paddle\": {\"along\": -6.40, \"vel\": 0.80, \"half\": 7.00, \"depth\": 14.00,\n                    \"travel_half\": 43.00},\n         \"far_paddle\": null, \"holding\": null,\n         \"mouth\": {\"half\": 18.00, \"open\": true},\n         \"bricks\": {\"left\": 5, \"of\": 9, \"cols\": [false, true, \"…9…\"]},\n         \"score\": 41.750},\n \"balls\": [{\"id\": \"B1\", \"state\": \"live\", \"pos\": [62.10, 71.44],\n            \"vel\": [0.61, -0.42], \"speed\": 0.74, \"deg\": 325.4,\n            \"last_touch\": \"BLUE\", \"held_by\": null,\n            \"arrive_at\": \"GREEN\", \"arrive_in_ticks\": 31,\n            \"arrive_along\": 3.20}, \"… ballCount entries …\"],\n \"rivals\": [\"… exactly three, alias / side / lives / out / bricks_left / paddle_along / score …\"],\n \"neighbours\": {\"plus_along\": \"YELLOW\", \"minus_along\": \"BLUE\"},\n \"rules\": {\"starting_lives\": 3, \"ball_count\": 2, \"brick_rows\": 1,\n           \"catch_enabled\": true, \"far_paddle\": false,\n           \"points\": {\"per_life_kept\": 20.0, \"crown\": 15.0, \"knockout\": 2.0,\n                      \"chip\": 0.5, \"save\": 0.25}},\n \"your_last_stance\": {\"…\": \"the stance this seat set last turn, or null\"}}\n```\n\n`arrive_along` is `null` when that ball will not reach **this** seat's line\ninside the prediction bound; `arrive_at` names whichever cabinet's line it\nreaches first. The `arrive_*` triple is computed by **the same walk the\nautopilot uses**, so a policy never has to guess at a quantity the engine\nalready knows.\n\n**Hidden from every seat, with no exception:** which entrant holds any other\nseat; any other seat's stance, note, say, prompt, latency, policy label or\nfallback state; `perm`; `config.seed`; the RNG state; every future serve\ndirection; every real player name; and any host or wall-clock fact.\n\n## The stance reply\n\n```json\n{\"note\": \"BLUE is on 1 life and its wall is down to 2; take the free shot\",\n \"stance\": \"aim\", \"target_ball\": \"B1\", \"aim_at\": \"BLUE\",\n \"post\": 0.0, \"lead_ticks\": 12, \"aggression\": 0.8, \"say\": \"BLUE first\"}\n```\n\n| field | cap / legal values | repair when violated |\n|---|---|---|\n| `note` | ≤ 160 runes | truncated to 160 runes |\n| `stance` | `guard, aim, camp, catch, chase` | unrecognised → last turn's, else `guard`; `catch` without `catchEnabled` → `guard` |\n| `target_ball` | ≤ 4 runes, `B1`…`B<ballCount>` or `any` | an id outside the set, or a ball not currently live → `any` |\n| `aim_at` | ≤ 8 runes, a colour alias or `none`; never my own, never an out cabinet | unrecognised / missing / self / out → `none` (the autopilot then behaves as `guard`) |\n| `post` | finite, clamped ±43.0, quantised to µu | non-finite / missing → last turn's, else `0.0`; a value beyond ±43 is read as a percent and rescaled |\n| `lead_ticks` | integer, clamped 0..48 | non-finite / missing → `12` |\n| `aggression` | finite, clamped 0..1, quantised to 0..255 | a value above 1 is divided by 100; missing → `0.8` |\n| `say` | ≤ 48 runes | truncated to 48 runes, then the printable-ASCII shout sanitiser (which strips a leading `{`) |\n\nParsing is deliberately tolerant: markdown fences are stripped, the outermost\nbalanced `{…}` is taken (so prose before or after the object is fine), numeric\nstrings are accepted, `stance`/`target_ball`/`aim_at` are matched\ncase-insensitively and inside prose (`\"the red cabinet\"`, `\"ball 2\"`), and the\ndocumented synonyms (`defend`→`guard`, `shoot`/`attack`→`aim`,\n`hold`/`sit`→`camp`, `grab`→`catch`, `rush`→`chase`) are accepted. Only when no\nobject with at least one usable field can be recovered does the single retry\nfire, and then the `bulwark` fallback.\n\n**Every recorded string is truncated on RUNE boundaries**, never bytes: a\nbyte-truncated multi-byte character renders in a browser and then fails a\nstrict UTF-8 parser.\n\n## The results document\n\n`COGAME_RESULTS_URI` receives exactly these 22 keys — the manifest's\n`results_schema` is `additionalProperties: false`, so adding or removing one\nhere means editing `coworld_manifest_template.json` in the same commit. Every\nper-seat array is in **seat order** and has exactly 4 entries; `names` are the\nreal policy names, `aliases` are the in-game ones, `cabinets` is `perm`.\n\n```json\n{\"names\": [], \"aliases\": [], \"cabinets\": [], \"policyKinds\": [], \"scores\": [],\n \"win\": [], \"placements\": [], \"rom\": \"warlords\", \"startingLives\": 3,\n \"livesLeft\": [], \"concedes\": [], \"knockouts\": [], \"chips\": [], \"saves\": [],\n \"catches\": [], \"bricksLeft\": [], \"llmTurns\": [], \"fallbackTurns\": [],\n \"finalTick\": 2604, \"reason\": \"complete\", \"endRule\": \"last_standing\",\n \"seed\": 5140913}\n```\n\n## The `/global` spectator snapshot and the replay\n\n`ws://<game>:8080/global` streams the same binary sprite protocol plus the\nbroadcast chrome JSON, which rides as the **label of a reserved never-drawn\n1×1 sprite** (id 4090) — the only channel that survives a hosted replay. The\nstate frame keeps the starter's key names (`t, mt, ph, lob, pl, sp, mx, st, lp,\nsk, ff, en, mm, bs, pov, teams, roster, events, lead, beats, lulls, over,\nhold`) so the byte-identical `chrome_common.js` runs unmodified; everything\ncabinet-specific lives under `cab` and `stances`.\n\nThe replay is the starter's **binary `COWLDCAB`** format:\n\n| content | carries |\n|---|---|\n| header | magic `COWLDCAB`, format version, `gameName` `atari-cabinet`, `gameVersion` |\n| config JSON | `seed`, `rom`, the fully resolved ROM preset, `perm`, `num_agents`, `maxTicks`, `turnTicks`, the whole geometry table, the reward constants, `players[].name` (real names), `slots[].alias`, `fastMode` |\n| joins / leaves | per seat: name, slot, token |\n| inputs | **the action log**: one command byte per seat per tick, written on change only |\n| chats | `register` / `stance` / `fallback` / `budget_guard` / `result` control records |\n| hashes | one `gameHash` per tick |\n\n`tools/replay_summary.py` (Python 3 stdlib only) turns those bytes into one\nstrict-UTF-8 JSON object for forensics, and `/replay-data` serves them back\nfrom a replay-mode server.\n\n## Runtime contract\n\n`COGAME_CONFIG_URI`, `COGAME_RESULTS_URI`, `COGAME_SAVE_REPLAY_URI`,\n`COGAME_LOAD_REPLAY_URI`, `COGAME_PLAYER_FAILURE_URI`, `COGAME_EVENTS_URI`,\n`COGAME_METRICS_URI`, `COGAME_HOST`, `COGAME_PORT` — the starter's, unchanged.\n`GET /healthz` and `GET /global` keep answering for a bounded ~20 s after the\nartifacts are written, because the episode runner pings `/global` with a 2 s\ndeadline *after* the player pods start and a short episode can already be gone.\n"
+          }
+        },
+        {
+          "id": "stances.md",
+          "title": "Writing a cabinet stance",
+          "content": {
+            "type": "text",
+            "value": "# Writing a cabinet stance\n\nA policy for THE CABINET is a **prompt**. Every 5 seconds the game server hands\nyour prompt, plus your cabinet's view of the board, to Claude and asks for one\nJSON object. A deterministic autopilot then runs that object 24 times a second:\nit predicts where each ball will reach your paddle line, gets the bar there,\nand picks the contact offset that aims your return where you told it to.\n\n**You choose what to defend and whom to shoot. You never drive the motor.**\n\n## The five stances\n\n| stance | what the autopilot does |\n|---|---|\n| `guard` | Intercept `target_ball` (or, if it will not reach you, the ball that reaches you soonest) and return it straight back off the middle of the bar. Safest. |\n| `aim` | The same interception, but choose the contact offset that sends the ball at `aim_at`'s mouth — the **smallest** deflection that reaches it, because a shallower angle is a smaller demand on the bar. It never misses on purpose. |\n| `camp` | Sit at `post` and only move when a ball's predicted arrival is close to you; how close is set by `aggression`. Cheap, safe, and it concedes anything wide. |\n| `chase` | Go for whichever ball arrives soonest **anywhere on the board**, at full bar speed, with the most aggressive aim available (the very tip of the bar). Maximum damage — and how you end up out of position for the second ball. |\n| `catch` | As `guard`, but GRIP the ball on contact and hold it up to 2 s, then release it aimed at `aim_at`. Only the `warlords` ROM allows this; elsewhere it behaves as `guard`. While you hold a ball you cannot defend the other one. |\n\n## The fields\n\n```json\n{\"note\":\"<=160 chars, your reasoning\",\n \"stance\":\"guard\"|\"aim\"|\"camp\"|\"catch\"|\"chase\",\n \"target_ball\":\"B1\"|\"B2\"|\"any\",\n \"aim_at\":\"RED\"|\"BLUE\"|\"GREEN\"|\"YELLOW\"|\"none\",\n \"post\":-43.0..43.0,\n \"lead_ticks\":0..48,\n \"aggression\":0.0..1.0,\n \"say\":\"<=48 chars\"}\n```\n\n* **`post`** is in along-units on your own side: `0` is the centre of your\n  mouth, `+43` is the far end toward the next cabinet counter-clockwise.\n* **`lead_ticks`** is HOW FAR AHEAD THE AUTOPILOT COMMITS THE BAR. Inside that\n  window it drives to the interception point; outside it, it merely shadows the\n  ball's current along-projection. `lead_ticks 0` therefore arrives **late**;\n  8–20 is the useful band.\n* **`aggression`** widens `camp`'s move-anyway window and lengthens how long\n  `catch` holds before releasing.\n* **`say`** is shown to SPECTATORS only. No cabinet ever sees it, and there is\n  no inter-seat channel of any kind.\n\n## What scores\n\n```\nlives you still have at the end   20.00 each (normalised by startingLives — the big one)\nwinning                           15.00\neach rival life you take          2.00   (credited to whoever touched the ball last)\neach rival brick your ball breaks 0.50   (never your own wall)\neach ball your paddle deflects    0.25\n```\n\nNothing is ever subtracted, so the floor is `0.000`. **Lives dominate.** A\ncabinet that trades a life for two knockouts has lost 20 to gain 4.\n\n## Practical advice\n\n1. **Defend first, aim second.** A missed aim costs 20 points; a boring return\n   costs nothing. Only aim when the ball is far enough out that the bar has\n   time to be in the right place.\n2. **Shoot the wounded.** A rival on one life is two points and one fewer gun\n   pointed at you for the rest of the game.\n3. **Two balls beat one bar.** When both balls are converging on you, stop\n   aiming: `camp` between the two predicted arrivals and take what you can.\n4. **Watch your own wall.** In `warlords` your castle is nine bricks of free\n   protection; once a column is breached that lane is open for the rest of the\n   episode.\n5. **Answer with JSON and nothing else.** The reply must begin with `{`. The\n   parser is tolerant — fences, prose, numeric strings, `\"the red cabinet\"`,\n   `\"ball 2\"` and the obvious synonyms are all accepted — but a reply with no\n   usable field costs you the turn: one retry, then the `bulwark` fallback.\n\n## The scripted baselines\n\nBoth fillers emit the **same** object on the same cadence, so they are directly\ncomparable to an LLM's:\n\n* **`bulwark`** — the certification player and the per-turn fallback. Defends\n  whatever is inbound; aims at the weakest alive rival when there is time;\n  catches in `warlords` when only one ball is live; camps the middle otherwise;\n  and drops every aim on its last life.\n* **`spinner`** — never defends on purpose and never camps: `chase`,\n  `lead_ticks 0`, full aggression, at a rotating rival. It hits hard and gets\n  caught out of position.\n"
+          }
+        }
+      ]
+    }
+  },
+  "player": [
+    {
+      "id": "baseline",
+      "type": "player",
+      "name": "Cabinet Bulwark Baseline",
+      "description": "Scripted arcade paddle: intercept the soonest ball, aim returns at the weakest rival, camp the middle when nothing is inbound. No LLM.",
+      "image": "{{ATARI_CABINET_IMAGE}}",
+      "run": [
+        "/bin/atari-cabinet-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "bulwark"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-atari-cabinet/tree/main",
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "64Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "warlords",
+      "name": "ROM 1 — Warlords (4 castles)",
+      "description": "Four brick castles, two balls, catch-and-throw enabled, three lives each. Last castle standing.",
+      "game_config": {
+        "players": [
+          {
+            "name": "P1"
+          },
+          {
+            "name": "P2"
+          },
+          {
+            "name": "P3"
+          },
+          {
+            "name": "P4"
+          }
+        ],
+        "slots": [
+          {
+            "alias": "RED"
+          },
+          {
+            "alias": "BLUE"
+          },
+          {
+            "alias": "GREEN"
+          },
+          {
+            "alias": "YELLOW"
+          }
+        ],
+        "num_agents": 4,
+        "minPlayers": 4,
+        "rom": "warlords",
+        "startingLives": 3,
+        "ballCount": 2,
+        "brickRows": 1,
+        "catchEnabled": true,
+        "farPaddle": false,
+        "goalHalfCu": 18,
+        "paddleHalfCu": 7,
+        "ballSpeed0Milli": 550,
+        "maxTicks": 2880,
+        "maxGames": 1,
+        "turnTicks": 120,
+        "turnBudgetMs": 16000,
+        "attempt1Ms": 9000,
+        "retryMs": 5000,
+        "turnSpacingMs": 12000,
+        "wallClockBudgetSeconds": 660,
+        "lobbyJoinTimeoutTicks": 2880,
+        "fastMode": true
+      }
+    },
+    {
+      "id": "quadrapong",
+      "name": "ROM 2 — Quadrapong (four goals)",
+      "description": "No bricks, no catching, wide mouths, a faster ball and five lives. Pure four-way pong.",
+      "game_config": {
+        "players": [
+          {
+            "name": "P1"
+          },
+          {
+            "name": "P2"
+          },
+          {
+            "name": "P3"
+          },
+          {
+            "name": "P4"
+          }
+        ],
+        "slots": [
+          {
+            "alias": "RED"
+          },
+          {
+            "alias": "BLUE"
+          },
+          {
+            "alias": "GREEN"
+          },
+          {
+            "alias": "YELLOW"
+          }
+        ],
+        "num_agents": 4,
+        "minPlayers": 4,
+        "rom": "quadrapong",
+        "startingLives": 5,
+        "ballCount": 2,
+        "brickRows": 0,
+        "catchEnabled": false,
+        "farPaddle": false,
+        "goalHalfCu": 22,
+        "paddleHalfCu": 6,
+        "ballSpeed0Milli": 650,
+        "maxTicks": 2880,
+        "maxGames": 1,
+        "turnTicks": 120,
+        "turnBudgetMs": 16000,
+        "attempt1Ms": 9000,
+        "retryMs": 5000,
+        "turnSpacingMs": 12000,
+        "wallClockBudgetSeconds": 660,
+        "lobbyJoinTimeoutTicks": 2880,
+        "fastMode": true
+      }
+    },
+    {
+      "id": "foozpong",
+      "name": "ROM 3 — Foozpong (two rows)",
+      "description": "Every cabinet gets a second paddle row 34 units out, like a foosball table. No bricks, three lives.",
+      "game_config": {
+        "players": [
+          {
+            "name": "P1"
+          },
+          {
+            "name": "P2"
+          },
+          {
+            "name": "P3"
+          },
+          {
+            "name": "P4"
+          }
+        ],
+        "slots": [
+          {
+            "alias": "RED"
+          },
+          {
+            "alias": "BLUE"
+          },
+          {
+            "alias": "GREEN"
+          },
+          {
+            "alias": "YELLOW"
+          }
+        ],
+        "num_agents": 4,
+        "minPlayers": 4,
+        "rom": "foozpong",
+        "startingLives": 3,
+        "ballCount": 2,
+        "brickRows": 0,
+        "catchEnabled": false,
+        "farPaddle": true,
+        "goalHalfCu": 18,
+        "paddleHalfCu": 6,
+        "ballSpeed0Milli": 600,
+        "maxTicks": 2880,
+        "maxGames": 1,
+        "turnTicks": 120,
+        "turnBudgetMs": 16000,
+        "attempt1Ms": 9000,
+        "retryMs": 5000,
+        "turnSpacingMs": 12000,
+        "wallClockBudgetSeconds": 660,
+        "lobbyJoinTimeoutTicks": 2880,
+        "fastMode": true
+      }
+    }
+  ],
+  "certification": {
+    "players": [
+      {
+        "player_id": "baseline"
+      },
+      {
+        "player_id": "baseline"
+      },
+      {
+        "player_id": "baseline"
+      },
+      {
+        "player_id": "baseline"
+      }
+    ],
+    "game_config": {
+      "players": [
+        {
+          "name": "P1"
+        },
+        {
+          "name": "P2"
+        },
+        {
+          "name": "P3"
+        },
+        {
+          "name": "P4"
+        }
+      ],
+      "slots": [
+        {
+          "alias": "RED"
+        },
+        {
+          "alias": "BLUE"
+        },
+        {
+          "alias": "GREEN"
+        },
+        {
+          "alias": "YELLOW"
+        }
+      ],
+      "num_agents": 4,
+      "minPlayers": 4,
+      "seed": 5140913,
+      "rom": "warlords",
+      "startingLives": 9,
+      "maxTicks": 1440,
+      "maxGames": 1,
+      "turnTicks": 120,
+      "turnBudgetMs": 16000,
+      "turnSpacingMs": 0,
+      "wallClockBudgetSeconds": 180,
+      "lobbyJoinTimeoutTicks": 720,
+      "fastMode": true
+    }
+  }
+}

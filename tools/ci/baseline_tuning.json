@@ -1,0 +1,57 @@
+{
+  "swept": "tools/tune_baselines.nim",
+  "grid": {
+    "reactTicks": [
+      20,
+      32,
+      44,
+      56,
+      68,
+      80,
+      96,
+      140,
+      200,
+      240
+    ],
+    "campPostCu": [
+      0,
+      6,
+      12
+    ],
+    "aggressionMilli": [
+      400,
+      600,
+      800,
+      1000
+    ]
+  },
+  "objective": "in a 2-bulwark / 2-spinner mix, maximise the share of seeds a bulwark seat takes placement 1, then the bulwark mean score, then total saves",
+  "seeds": 20,
+  "roms": [
+    "warlords",
+    "quadrapong",
+    "foozpong"
+  ],
+  "pick": {
+    "reactTicks": 140,
+    "campPostCu": 0,
+    "aggressionMilli": 800
+  },
+  "measured": {
+    "warlords": {
+      "bulwark_placement_1_of_20": 10,
+      "bulwark_mean_score": 59.6,
+      "spinner_mean_score": 62.5,
+      "bulwark_x4_concedes_per_episode": 2.0,
+      "bulwark_x4_saves_per_episode": 100
+    },
+    "quadrapong": {
+      "bulwark_placement_1_of_20": 11,
+      "bulwark_mean_score": 58.6,
+      "spinner_mean_score": 57.4,
+      "bulwark_x4_concedes_per_episode": 5.2,
+      "bulwark_x4_saves_per_episode": 93
+    }
+  },
+  "note": "The PHYSICS constants and the ROM presets are NOT in the grid and were not touched: if the baselines cannot hold a rally the sweep moves these three numbers, not the sim (design note, tests/test_baselines.nim)."
+}

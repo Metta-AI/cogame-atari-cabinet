@@ -1,0 +1,7 @@
+services:
+  atari-cabinet:
+    image: coworld-atari-cabinet:latest
+    platform: linux/amd64
+    build:
+      context: .
+      network: host

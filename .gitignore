@@ -1,0 +1,18 @@
+# build output
+/dist/
+/nimcache/
+/replay-viewer/dist/
+*.exe
+*.o
+
+# local binaries the tests and tools produce
+/atari-cabinet
+/atari-cabinet-player
+/tests/test_*[!m]
+!/tests/*.nim
+!/tests/data/
+
+# local scratch
+*.replay
+*.log
+.DS_Store
