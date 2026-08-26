@@ -1,7 +1,7 @@
 ## Sim unit tests: the ball, the bar, the fan and the no-tunnelling bound.
 
-import std/[math, random, strutils, unittest]
-import cabinet/[sim, stances, control, baselines]
+import std/[json, math, random, strutils, unittest]
+import cabinet/[sim, stances, control, baselines, broadcast]
 import helpers
 
 suite "physics":
@@ -217,3 +217,89 @@ suite "physics":
     for k in 0 ..< CabinetCount:
       check game.scoreOf(k) >= 0.0
       check game.scoreOf(k) < 200.0
+
+  test "a ball that slips past the bar's end is a NEAR MISS, and the feed says so":
+    # "SO CLOSE — B1 grazed RED's bar" is the drama the game is made of, and it
+    # was declared everywhere and emitted nowhere: the enum, the wire name and
+    # NearMissUu all existed with no emitter, so the feed line could never
+    # appear (r1-5). PRESENTATION ONLY: nearMisses is not mixed into gameHash.
+    let config = episodeConfig(101)
+    var game = initSimServer(config)
+    game.gameEventLoggingEnabled = false
+    for seat in 0 ..< CabinetCount:
+      discard game.addPlayer("P" & $(seat + 1), seat, "token-" & $seat)
+    game.phase = Playing
+    game.gameStartTick = 0
+    game.collectEvents = true
+    for row in 0 ..< MaxBrickRows:         ## a brick would stop it first
+      for col in 0 ..< BricksPerRow:
+        game.cabinets[0].bricks[row][col] = false
+    for i in 0 ..< game.balls.len:
+      game.balls[i].state = bsServing
+      game.balls[i].serveTimer = 9999      ## park every other ball
+    # Ball 0 heads straight into cabinet 0's mouth, 4 000 µu (0.4 cu) outside
+    # the bar's end: inside NearMissUu, so it grazes.
+    let start = worldOf(
+      0, paddleHalfUu(config) + BallHalf + 4_000'i32,
+      PaddleDepth + 40_000'i32)
+    game.balls[0].state = bsLive
+    game.balls[0].x = start.x
+    game.balls[0].y = start.y
+    game.balls[0].dir = fromLocalDir(48, 0)
+    game.balls[0].speed = ballSpeed0Uu(config)
+    var commands = newSeq[uint8](CabinetCount)
+    for seat in 0 ..< CabinetCount:
+      commands[seat] = NeutralCommand
+    let livesBefore = game.cabinets[0].lives
+    for _ in 0 ..< 60:
+      game.step(commands)
+    check game.cabinets[0].nearMisses == 1
+    check game.cabinets[0].lastNearMissBall == 0
+    check game.cabinets[0].lives == livesBefore - 1   ## it still went in
+    check game.cabinets[0].saves == 0                 ## and was never touched
+    var sawEvent = false
+    for event in game.events:
+      if event.kind == NearMiss and event.cabinet == 0:
+        sawEvent = true
+        check event.ball == 0
+        check event.amount > 0
+        check event.amount <= int(NearMissUu)
+    check sawEvent
+    # …and the broadcast turns it into the feed's own event.
+    var tracker = initBroadcastTracker()
+    tracker.resync(game)
+    tracker.nearMisses[0] = 0                ## as if the tick had just landed
+    let events = newJArray()
+    game.stepEvents(tracker, events)
+    var wired = false
+    for event in events:
+      if event{"k"}.getStr == "near_miss":
+        wired = true
+        check event{"ball"}.getStr == "B1"
+        check event{"cabinet"}.getInt == 0
+    check wired
+
+  test "a ball down the middle is NOT a near miss":
+    let config = episodeConfig(102)
+    var game = initSimServer(config)
+    game.gameEventLoggingEnabled = false
+    for seat in 0 ..< CabinetCount:
+      discard game.addPlayer("P" & $(seat + 1), seat, "token-" & $seat)
+    game.phase = Playing
+    game.collectEvents = true
+    for i in 0 ..< game.balls.len:
+      game.balls[i].state = bsServing
+      game.balls[i].serveTimer = 9999
+    let start = worldOf(0, 0'i32, PaddleDepth + 40_000'i32)
+    game.balls[0].state = bsLive
+    game.balls[0].x = start.x
+    game.balls[0].y = start.y
+    game.balls[0].dir = fromLocalDir(48, 0)
+    game.balls[0].speed = ballSpeed0Uu(config)
+    var commands = newSeq[uint8](CabinetCount)
+    for seat in 0 ..< CabinetCount:
+      commands[seat] = NeutralCommand
+    for _ in 0 ..< 60:
+      game.step(commands)
+    check game.cabinets[0].nearMisses == 0
+    check game.cabinets[0].saves >= 1        ## the bar was right there

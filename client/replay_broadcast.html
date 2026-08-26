@@ -4288,11 +4288,18 @@ button.beat-marker {
           CTX.esc(alias(s, e.cabinet)) + '</span>' +
           '<span class="badge">catches and holds…</span>');
         return true;
+      case 'near_miss':
+        // "SO CLOSE — B2 grazed RED's bar": the drama the game is made of.
+        // Rare by construction (the ball has to pass within NearMissUu of the
+        // bar's end), so it does not bury the feed the way save/chip would.
+        feedRow('<span class="who ' + (e.team || '') + '">SO CLOSE</span>' +
+          '<span class="badge">' + CTX.esc(String(e.ball || 'ball')) +
+          ' grazed ' + CTX.esc(alias(s, e.cabinet)) + "'s bar</span>");
+        return true;
       case 'save':
       case 'chip':
       case 'serve':
       case 'release':
-      case 'near_miss':
       case 'turn_end':
         return true;      // continuous action; the BOARD is that readout
       case 'kill':

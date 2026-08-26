@@ -78,6 +78,7 @@ proc initSimServer*(config: GameConfig): SimServer =
     result.cabinets[k].outTick = -1
     result.cabinets[k].heldBall = -1
     result.cabinets[k].placement = 0
+    result.cabinets[k].lastNearMissBall = -1
     for row in 0 ..< MaxBrickRows:
       for col in 0 ..< BricksPerRow:
         result.cabinets[k].bricks[row][col] = row < config.brickRows
@@ -591,6 +592,30 @@ proc stepBall(sim: var SimServer, index: int, commands: openArray[uint8]) =
     dx = int32((int64(ball.speed) * int64(vector.x)) div int64(DirQ12One))
     dy = int32((int64(ball.speed) * int64(vector.y)) div int64(DirQ12One))
   let contact = sim.earliestContact(ball.x, ball.y, dx, dy)
+  # SO CLOSE. A ball that gets past a bar's END by less than NearMissUu is the
+  # drama the game is made of, so it is named on the tick it happens: the bar's
+  # own depth plane is crossed, before whatever this displacement ends on (a
+  # save happens at the bar's FACE, strictly earlier, so a ball that was
+  # actually hit is never a near miss). PRESENTATION ONLY — `nearMisses` is
+  # never mixed into gameHash and nothing in the resolution reads it.
+  for k in 0 ..< CabinetCount:
+    if sim.cabinets[k].isOut:
+      continue
+    let crossing = sideDepthCrossing(k, ball.x, ball.y, dx, dy, PaddleDepth)
+    if not crossing.hit:
+      continue
+    if contact.kind != ckNone and isBefore(contact.t, crossing.t):
+      continue                   ## the displacement ended before the plane
+    let
+      cx = ball.x + fracValueUu(crossing.t, dx)
+      cy = ball.y + fracValueUu(crossing.t, dy)
+      along = localOf(k, cx, cy).along
+      reach = paddleHalfUu(sim.config) + BallHalf
+      gap = abs(along - sim.cabinets[k].alongCentre) - reach
+    if gap > 0 and gap <= NearMissUu:
+      inc sim.cabinets[k].nearMisses
+      sim.cabinets[k].lastNearMissBall = int32(index)
+      sim.emitEvent(NearMiss, cabinet = k, ball = index, amount = int(gap))
   if contact.kind == ckNone:
     ball.x = ball.x + dx
     ball.y = ball.y + dy

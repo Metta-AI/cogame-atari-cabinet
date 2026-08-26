@@ -197,6 +197,8 @@ type
     saves*, chips*, knockouts*, concedes*, catches*: int32
     scoreMicro*: int64
     placement*: int32
+    nearMisses*: int32       ## PRESENTATION ONLY: never mixed into gameHash
+    lastNearMissBall*: int32 ## the ball that grazed the bar, for the feed line
 
   Player* = object
     ## One SEAT. A seat is not a cabinet: seat `s` drives cabinet `perm[s]`.

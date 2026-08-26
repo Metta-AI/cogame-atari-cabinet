@@ -20,6 +20,7 @@ type
     saves*: array[CabinetCount, int32]
     chips*: array[CabinetCount, int32]
     catches*: array[CabinetCount, int32]
+    nearMisses*: array[CabinetCount, int32]
     bricks*: array[CabinetCount, int]
     columnEmpty*: array[CabinetCount, array[BricksPerRow, bool]]
     ballState*: array[MaxBalls, int]
@@ -44,6 +45,7 @@ proc resync*(tracker: var BroadcastTracker, sim: SimServer) =
     tracker.saves[k] = sim.cabinets[k].saves
     tracker.chips[k] = sim.cabinets[k].chips
     tracker.catches[k] = sim.cabinets[k].catches
+    tracker.nearMisses[k] = sim.cabinets[k].nearMisses
     tracker.bricks[k] = sim.bricksRemaining(k)
     for col in 0 ..< BricksPerRow:
       tracker.columnEmpty[k][col] = sim.brickColumnEmpty(k, col)
@@ -84,6 +86,11 @@ proc stepEvents*(
     if sim.cabinets[k].catches > tracker.catches[k]:
       events.add(%*{
         "k": "catch", "t": tick, "cabinet": k, "team": teamKeyOfCabinet(k)})
+    if sim.cabinets[k].nearMisses > tracker.nearMisses[k]:
+      events.add(%*{
+        "k": "near_miss", "t": tick, "cabinet": k,
+        "team": teamKeyOfCabinet(k),
+        "ball": ballId(max(0, int(sim.cabinets[k].lastNearMissBall)))})
     let bricks = sim.bricksRemaining(k)
     for col in 0 ..< BricksPerRow:
       let empty = sim.brickColumnEmpty(k, col)
@@ -111,6 +118,7 @@ proc stepEvents*(
     tracker.saves[k] = sim.cabinets[k].saves
     tracker.chips[k] = sim.cabinets[k].chips
     tracker.catches[k] = sim.cabinets[k].catches
+    tracker.nearMisses[k] = sim.cabinets[k].nearMisses
     tracker.bricks[k] = bricks
   for i in 0 ..< sim.balls.len:
     let state = ord(sim.balls[i].state)
