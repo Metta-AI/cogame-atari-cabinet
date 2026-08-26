@@ -63,7 +63,8 @@ const
   BubbleObjectBase = 1200
   ScoreObjectBase = 1300
   MaxBubbles* = 3
-  BubbleBandLoCu* = 92
+  BubbleGapPx* = 3
+  BubbleBandLoCu* = 89
   BubbleBandHiCu* = 99
     ## Speech bubbles live in a RESERVED band across the top of the board and
     ## are never positioned relative to a paddle: a caption laid out relative
@@ -71,6 +72,14 @@ const
     ## coordinate and clipped to a sliver, which a canvas accepts silently
     ## (cogchemists, 2026-08-24). `viewer_smoke.mjs --strict-text-bounds`
     ## gates it.
+    ##
+    ## The band's HEIGHT is the cap MEASURED in the drawing font, never a
+    ## guess: `MaxBubbles` rows of a `MaxSayRunes` line baked from
+    ## `data/font.ttf` at size 22, each `BubbleGapPx` apart. At 24 px of pitch
+    ## against a 29 px baked line the rows overlapped each other by five
+    ## pixels — two sentences on top of one another, drawn perfectly inside
+    ## the board and unreadable — so the pitch now comes from the sprite and
+    ## the floor moved to hold it (r1 review, 2026-08-26).
 
 type
   GlobalViewerState* = object
@@ -652,8 +661,10 @@ proc addBoard(
     let baked = textSprite(label, tint[0], tint[1], tint[2], 22)
     # The band is quoted in CABINET coordinates (y UP) and the board draws in
     # screen coordinates (y DOWN), so it converts here rather than in the
-    # layout: Y in [92, 99] cu is the TOP of the screen.
-    let py = ((100 - BubbleBandHiCu) * MapHeight) div 100 + slot * 24
+    # layout: Y in [BubbleBandLoCu, BubbleBandHiCu] cu is the TOP of the
+    # screen, and the row pitch is the BAKED line height, not a guess.
+    let py = ((100 - BubbleBandHiCu) * MapHeight) div 100 +
+      slot * (baked.height + BubbleGapPx)
     emitObject(packet, placed, id, max(2, (MapWidth - baked.width) div 2),
       max(2, min(MapHeight - baked.height - 2, py)), 8_500, BoardLayer,
       spriteId)

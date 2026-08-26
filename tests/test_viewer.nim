@@ -223,3 +223,11 @@ suite "viewer":
     check "gen_render_fixture.nim" in ci
     check "render-fixture" in ci
 
+  test "a full-cap stance note gets a WRAPPING band in the feed":
+    # The inherited .feed-row is nowrap and sized to content, which sends a
+    # 160-rune note off the left edge of a 360 px stage. The band widens; the
+    # note is never cut (prompts/30-review-loop.md item 15).
+    check ".feed-row.cab-note-row {" in page
+    check "white-space: normal;" in page
+    check "'cab-note-row'" in page
+    check "#killfeed { min-height:" in page

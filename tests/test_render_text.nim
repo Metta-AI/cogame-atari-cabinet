@@ -51,6 +51,19 @@ suite "board text":
         check not (a.x < b.x + b.width and b.x < a.x + a.width and
           a.y < b.y + b.height and b.y < a.y + a.height)
 
+  test "the bubbles sit inside the RESERVED band, at the baked line pitch":
+    let
+      bandTop = ((100 - BubbleBandHiCu) * MapHeight) div 100
+      bandBottom = ((100 - BubbleBandLoCu) * MapHeight) div 100
+    var rows = 0
+    for placement in placements:
+      if placement.text.find(": ") <= 0:
+        continue
+      inc rows
+      check placement.y >= bandTop
+      check placement.y + placement.height <= bandBottom
+    check rows == MaxBubbles
+
   test "the chrome JSON carries every seat's full-cap note":
     let chrome = chromeJson(frame.packet)
     check chrome.len > 0

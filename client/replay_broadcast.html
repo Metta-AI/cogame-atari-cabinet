@@ -4172,6 +4172,28 @@ button.beat-marker {
 /* --- feed accents ------------------------------------------------------ */
 .feed-row .cab-note { color: var(--amber); letter-spacing: 0.04em; }
 .feed-row .cab-say { color: var(--paper); font-style: italic; }
+
+/* --- the note band ------------------------------------------------------
+   A stance `note` is a SENTENCE at MaxNoteRunes = 160, not a nameplate. The
+   inherited .feed-row is `white-space: nowrap; max-width: none` — sized to
+   content so a 10-char name never truncates — and #killfeed is right-anchored,
+   so a full-cap note grows LEFTWARD off the stage: 366 px of row in a 360 px
+   board. Ellipsizing it is the defect prompts/30-review-loop.md item 15 names,
+   so the BAND changes instead: a note row wraps inside #killfeed's own column
+   and #killfeed reserves the height that column needs at the cap, whether or
+   not anyone is talking, so the scene does not jump when a remark lands. */
+.feed-row.cab-note-row {
+  white-space: normal;
+  max-width: 100%;
+  align-items: flex-start;
+  line-height: 1.3;
+  text-align: left;
+}
+.feed-row.cab-note-row .cab-note { flex: 1 1 auto; min-width: 0; }
+/* 160 runes of feed type wrap to at most six lines in the 228u column
+   (measured at the 0.5 hudscale floor, where the column is narrowest), and the
+   feed holds four rows. */
+#killfeed { min-height: calc(4 * 6 * 11 * var(--u)); }
 </style>
 <script>
 (function () {
@@ -4369,7 +4391,7 @@ button.beat-marker {
       feedRow('<span class="who ' + ((s.cab && cabTeamOf(s, d.cabinet)) || '') +
         '">' + CTX.esc(d.alias || '') + '</span>' +
         '<span class="glyph">:</span><span class="cab-note">' +
-        CTX.esc(d.note) + '</span>');
+        CTX.esc(d.note) + '</span>', 'cab-note-row');
     }
   }
 
