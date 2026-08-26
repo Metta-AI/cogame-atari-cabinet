@@ -160,6 +160,31 @@ suite "engine":
     let elapsed = (getMonoTime() - first).inMilliseconds.int
     check elapsed >= 1500
 
+  test "the inter-batch floor is NOT charged to the per-turn budget":
+    # The floor is a separate, separately-bounded wait. Measuring turnBudgetMs
+    # from before it meant a turn whose floor was longer than the budget lost
+    # BOTH attempts -- the single retry the design promises was available or
+    # not depending on how long the previous turn happened to take.
+    resetProvider(pmGarbage)
+    let config = episodeConfig(13, extra =
+      """{"turnSpacingMs":2500,"turnBudgetMs":2000,"attempt1Ms":1000,""" &
+      """"retryMs":1000}""")
+    var game = playingGame(config)
+    var engine = llmEngine(game)
+    discard engine.turn(game, 0, 0)           ## no floor before the first batch
+    let afterFirst = providerCalls
+    check afterFirst == CabinetCount * 2      ## attempt + one retry
+    let records = engine.turn(game, 1, 0)     ## this turn sleeps 2.5 s > budget
+    check providerCalls - afterFirst == CabinetCount * 2
+    # …and nothing is recorded as a `timeout`: the seats were never pre-empted,
+    # they were answered and their answers were garbage. The pre-empt path used
+    # to fire here and add a SECOND fallback record per seat on top of the
+    # tail's, which phase 60 counts.
+    for record in records:
+      let node = parseJson(record)
+      if node{"k"}.getStr == "fallback":
+        check node["cause"].getStr == "parse_error"
+
   test "a hung provider is bounded by the per-turn budget and falls back":
     resetProvider(pmSlow)
     let config = episodeConfig(4, extra =

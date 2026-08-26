@@ -345,9 +345,15 @@ proc turn*(
   ## Runs ONE decision turn and installs every seat's stance. Returns the
   ## replay chat records the turn produced. Never raises: every failure path
   ## ends in a legal stance.
-  let
-    budget = initDuration(milliseconds = max(1, sim.config.turnBudgetMs))
-    turnStart = getMonoTime()
+  let budget = initDuration(milliseconds = max(1, sim.config.turnBudgetMs))
+  ## `turnStart` is re-taken AFTER the inter-batch rate floor below, because
+  ## the floor is a separate, separately-bounded wait: measuring the budget
+  ## from before it meant a turn that slept 8 s and then timed out attempt 1 at
+  ## 9 s had "spent" 17 s of a 16 s budget and SKIPPED the single retry the
+  ## design promises, while a turn that slept 6 s got it. The budget wraps the
+  ## CALLS (attempt1Ms + retryMs = 14 000 <= turnBudgetMs = 16 000); the guard's
+  ## own per-turn estimate at :360 already adds turnSpacingMs on top.
+  var turnStart = getMonoTime()
   ## Throttle state is PER TURN: a 429 on turn k says nothing about turn k+1.
   engine.client.throttled = false
 
@@ -410,16 +416,21 @@ proc turn*(
   if open.len > 0:
     engine.lastBatchStart = getMonoTime()
     engine.batchStarted = true
+    turnStart = engine.lastBatchStart
 
   # --- up to two PARALLEL batches -----------------------------------------
-  var attempt = 0
+  var
+    attempt = 0
+    budgetTimedOut = false
   while open.len > 0 and attempt < 2:
     if engine.client.disabled:
       break
     if getMonoTime() - turnStart >= budget:
-      for seat in open:
-        result.add(fallbackRecord(turnIndex, seat, attempt + 1, "timeout",
-          "per-turn budget exhausted before attempt " & $(attempt + 1)))
+      # No record here: the tail below installs the bulwark stance for every
+      # still-open seat and records exactly ONE fallback per seat per turn.
+      # Recording again here gave the seat TWO fallback records for one turn,
+      # which phase 60 counts.
+      budgetTimedOut = true
       break
     let deadlineMs =
       if attempt == 0: sim.config.attempt1Ms else: sim.config.retryMs
@@ -486,6 +497,7 @@ proc turn*(
       if engine.client.disabled or engine.client.transport == ltNone:
         "no_credentials"
       elif engine.llmOff: "budget_guard"
+      elif budgetTimedOut: "timeout"
       elif engine.client.throttled: "throttled"
       else: "parse_error"
     result.add(fallbackRecord(turnIndex, seat, 2, cause,
