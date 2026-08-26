@@ -237,5 +237,12 @@ suite "manifest":
     check config["turnSpacingMs"].getInt == 0
     check config["lobbyJoinTimeoutTicks"].getInt <= 1440
     check config["wallClockBudgetSeconds"].getInt <= 240
-    # the release workflow gives certify room for the shutdown grace
-    check "--timeout-seconds" in sourceText(".github/workflows/coworld-release.yml")
+    # The release workflow gives CERTIFY room for the shutdown grace. Matching
+    # the bare flag anywhere in the file is vacuous -- upload-coworld carries
+    # its own --timeout-seconds and satisfied it while the certify step had
+    # none -- so the assertion reads the certify invocation itself.
+    let release = sourceText(".github/workflows/coworld-release.yml")
+    let certify = release.find("coworld certify dist/coworld_manifest.json")
+    check certify >= 0
+    let invocation = release[certify ..< min(release.len, certify + 400)]
+    check "--timeout-seconds 300" in invocation.split("- name:")[0]
