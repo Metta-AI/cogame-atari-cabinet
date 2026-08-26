@@ -1170,7 +1170,7 @@ body[data-embed] #board { top: 0; height: 100%; }
       <div class="lk-sprites" id="lk-sprites"></div>
     </div>
     <div class="lk-glow" aria-hidden="true"></div>
-    <div class="lk-cap" id="lk-cap" aria-hidden="true">Filling hoppers with fresh paint&hellip;</div>
+    <div class="lk-cap" id="lk-cap" aria-hidden="true">Four cabinets, one screen, and your paddle is a gun&hellip;</div>
     <div class="lk-bar" aria-hidden="true"><i></i></div>
     <div class="lk-sub">Bot locker room &middot; Loading replay</div>
   </div>
@@ -3279,15 +3279,17 @@ body[data-embed] #board { top: 0; height: 100%; }
     // checkMaxTicks path never crowns a winner — so timeLimit only pairs
     // with draw here.)
     if (o.endRule !== undefined) {
-      // PAINTBALL names the RULE the server actually applied, so the chip can
-      // never disagree with the endRule in results.json.
+      // The chip names the RULE the engine actually applied, so it can never
+      // disagree with the endRule in results.json.
       switch (o.endRule) {
-        case 'wipe': return o.draw ? 'MUTUAL WIPE' : 'WIPE';
-        case 'mercy': return 'MERCY — LEAD BEYOND THE CLOCK';
+        case 'last_standing': return 'LAST CABINET STANDING';
         case 'wall_clock': return 'WALL-CLOCK STOP';
         case 'sim_fault':
-        case 'host_error': return 'FAULT — NO RESULT';
-        default: return o.draw ? 'FULL TIME — DEAD EVEN' : 'FULL TIME ON THE HILL';
+        case 'host_error': return 'FAULT — SCORED AT THE FAULT';
+        case 'full_time': return 'FULL TIME';
+        case 'wipe': return o.draw ? 'MUTUAL WIPE' : 'WIPE';
+        case 'mercy': return 'MERCY — LEAD BEYOND THE CLOCK';
+        default: return o.draw ? 'FULL TIME — DEAD EVEN' : 'FULL TIME';
       }
     }
     if (o.draw) return o.timeLimit ? 'TIME LIMIT — DRAW' : 'DRAW';
@@ -4413,13 +4415,6 @@ button.beat-marker {
       var text = String((s.cab && s.cab.rom) || '').toUpperCase() +
         (turns > 0 ? ' · turn ' + Math.min(turn, turns) + '/' + turns : '');
       if (chip.textContent !== text) chip.textContent = text;
-    }
-    // The clock caption carries the ROM too, so a 360px embed that clips the
-    // chip still names it.
-    var cap = $('clock-caption');
-    if (cap && s.ph === 'playing' && s.cab && s.cab.rom) {
-      var capText = 'Time left · ' + String(s.cab.rom).toUpperCase();
-      if (cap.textContent !== capText) cap.textContent = capText;
     }
     ensureLegend();
     cabStances(s);
