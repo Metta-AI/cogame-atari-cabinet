@@ -30,6 +30,12 @@ type
 
   BallPrediction* = object
     perSide*: array[CabinetCount, Arrival]
+    perSideFar*: array[CabinetCount, Arrival]
+      ## The same walk against the FAR bar's own depth line
+      ## (`FarPaddleDepth`, 20 cu in FRONT of the near line). foozpong's second
+      ## row has to be told where the ball crosses ITS line: aiming it at the
+      ## near line's arrival puts it 20 cu behind the ball on every
+      ## non-perpendicular trajectory.
     firstSide*: int            ## whose line it reaches first, -1 for none
     firstTick*: int
 
@@ -75,6 +81,16 @@ proc predictBall*(sim: SimServer, index: int): BallPrediction =
         if tick < result.firstTick:
           result.firstTick = tick
           result.firstSide = side
+    for side in 0 ..< CabinetCount:
+      if result.perSideFar[side].reaches:
+        continue
+      let
+        before = localOf(side, x, y).depth
+        after = localOf(side, nx, ny).depth
+      if before > FarPaddleDepth and after <= FarPaddleDepth:
+        result.perSideFar[side].reaches = true
+        result.perSideFar[side].tick = tick
+        result.perSideFar[side].along = localOf(side, nx, ny).along
     x = nx
     y = ny
     # Wall reflections / mouth exits.
@@ -342,13 +358,19 @@ proc paddleCommand*(
   if sim.config.farPaddle:
     var farBall = if second >= 0: second else: chosen
     if farBall >= 0:
-      # The same steps 1-5 at FarPaddleDepth, with off = 0 always.
+      # The same steps 1-5 at FarPaddleDepth, with off = 0 always: the far bar
+      # is told where the ball crosses ITS OWN line, not the near one's.
       let prediction = predictions[farBall]
       var farTarget = 0'i32
       var farHorizon = stance.leadTicks
-      if prediction.perSide[cabinet].reaches:
-        farTarget = prediction.perSide[cabinet].along
-        farHorizon = min(farHorizon, prediction.perSide[cabinet].tick)
+      let arrival =
+        if prediction.perSideFar[cabinet].reaches:
+          prediction.perSideFar[cabinet]
+        else:
+          prediction.perSide[cabinet]
+      if arrival.reaches:
+        farTarget = arrival.along
+        farHorizon = min(farHorizon, arrival.tick)
       else:
         farTarget = int32(int64(stance.postUu) div 2'i64)
       if farTarget < -PaddleTravelHalf: farTarget = -PaddleTravelHalf

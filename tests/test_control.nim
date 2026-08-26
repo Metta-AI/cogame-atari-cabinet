@@ -214,3 +214,56 @@ suite "control":
     campStance.postUu = 0
     # camp with zero aggression and a distant arrival holds the post
     check decodePaddle(game.paddleCommand(0, campStance)).near == 4
+
+  test "the FAR bar is aimed at its OWN depth line, not the near one":
+    # foozpong's second row sits at FarPaddleDepth, 20 cu in FRONT of the near
+    # line, so the ball crosses it FIRST and at a different along on every
+    # non-perpendicular trajectory. Aiming the far bar at the near line's
+    # arrival puts it 20 cu behind the ball (r1-7).
+    var rng = initRand(5150)
+    let config = episodeConfig(31, rom = "foozpong")
+    check config.farPaddle
+    var checked = 0
+    for trial in 0 ..< 4000:
+      var game = randomState(rng, config)
+      for k in 0 ..< CabinetCount:
+        game.cabinets[k].isOut = false
+        game.cabinets[k].lives = 3
+      # ONE live ball, so the far bar tracks the ball this test predicts
+      # (step 7 gives it the SECOND-soonest arrival when there are two).
+      for i in 1 ..< game.balls.len:
+        game.balls[i].state = bsServing
+        game.balls[i].serveTimer = 9999
+      let prediction = game.predictBall(0)
+      if not prediction.perSide[0].reaches or
+          not prediction.perSideFar[0].reaches:
+        continue
+      # A ball that STARTS between the two lines reaches the near one first
+      # and the far one only after a reflection; the far bar still aims at its
+      # own line, but this test wants the ordinary approach.
+      if prediction.perSideFar[0].tick > prediction.perSide[0].tick:
+        continue
+      let
+        nearAlong = prediction.perSide[0].along
+        farAlong = prediction.perSideFar[0].along
+      # Far enough apart that the drive cannot round to "hold": the level is
+      # (delta / horizon) / PaddleStepSpeed, rounded.
+      if abs(farAlong - nearAlong) <= PaddleStepSpeed * 4:
+        continue                       ## near enough perpendicular: no test
+      if abs(nearAlong) >= PaddleTravelHalf:
+        continue                       ## the parked position must be reachable
+      inc checked
+      # …and a far bar parked exactly ON the near line's arrival is told to
+      # MOVE. Under the old code it was already where it wanted to be and the
+      # deadband held it still.
+      game.cabinets[0].farAlongCentre = nearAlong
+      game.balls[0].state = bsLive
+      var stance = defaultStance()
+      stance.stance = stGuard
+      stance.targetBall = 0
+      stance.leadTicks = 1             ## no lead: demand the whole delta now
+      let decoded = decodePaddle(game.paddleCommand(0, stance))
+      check decoded.far != 4
+      if checked >= 40:
+        break
+    check checked >= 20
