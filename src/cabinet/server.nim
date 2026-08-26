@@ -518,7 +518,11 @@ proc runServerLoop*(
           appState.globalViewers.del(websocket)
         appState.closedSockets.setLen(0)
 
-        if not replayLoaded and not seatsSeated and game.lobbyJoinTimedOut():
+        # `lobbyBudgetSpent`, not `lobbyJoinTimedOut`: the sim increments
+        # lobbyTicks and force-starts inside ONE step, so this frame-rate poll
+        # only ever saw budget-1 and then a phase that had already moved on --
+        # the no-show was never actually declared (r1-23).
+        if not replayLoaded and not seatsSeated and game.lobbyBudgetSpent():
           # A seat that never connects does NOT end the episode. Report the
           # no-show (lowest missing slot only), then start anyway: that
           # cabinet plays the published `bulwark` baseline for the whole run.

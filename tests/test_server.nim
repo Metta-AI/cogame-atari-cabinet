@@ -11,19 +11,27 @@ import helpers
 const
   Port = 18821
   Base = "http://127.0.0.1:" & $Port
+  NoShowPort = 18822
+  NoShowBase = "http://127.0.0.1:" & $NoShowPort
 
 type ServerArgs = object
   config: GameConfig
+  port: int
   replayPath: string
   resultsPath: string
+  failurePath: string
 
 var serverThread: Thread[ServerArgs]
 
 proc serve(args: ServerArgs) {.thread.} =
   {.gcsafe.}:
     putEnv("COGAME_RESULTS_URI", "file://" & args.resultsPath)
-    runServerLoop("127.0.0.1", Port, args.config, args.replayPath, "",
-      RuntimeConfig(host: "127.0.0.1", port: Port,
+    if args.failurePath.len > 0:
+      putEnv("COGAME_PLAYER_FAILURE_URI", "file://" & args.failurePath)
+    else:
+      delEnv("COGAME_PLAYER_FAILURE_URI")
+    runServerLoop("127.0.0.1", args.port, args.config, args.replayPath, "",
+      RuntimeConfig(host: "127.0.0.1", port: args.port,
         resultsUri: "file://" & args.resultsPath))
 
 suite "server":
@@ -43,7 +51,7 @@ suite "server":
     config.minPlayers = 4
     config.gameOverTicks = 4
     createThread(serverThread, serve,
-      ServerArgs(config: config, replayPath: replayPath,
+      ServerArgs(config: config, port: Port, replayPath: replayPath,
         resultsPath: resultsPath))
     let pool = newCurlPool(2)
     # bounded wait for the listener (the board caches bake first)
@@ -120,6 +128,67 @@ suite "server":
     check getFileSize(replayPath) > 500
     joinThread(serverThread)
     check not fileExists(work / "player_failure.json")
+
+  test "a seat that never joins is REPORTED, and the run still ends normally":
+    # DEGRADE, NEVER HANG at the lobby: a no-show is charged to the seat that
+    # caused it (COGAME_PLAYER_FAILURE_URI, lowest missing slot only) and the
+    # episode starts anyway, with that cabinet playing the published bulwark
+    # baseline. The report was code only -- nothing asserted it (r1-23).
+    let work = getTempDir() / "cabinet-noshow-test"
+    createDir(work)
+    let
+      replayPath = work / "episode.replay"
+      resultsPath = work / "results.json"
+      failurePath = work / "player_failure.json"
+    for path in [replayPath, resultsPath, failurePath]:
+      removeFile(path)
+    var config = episodeConfig(2718, startingLives = 1, maxTicks = 240)
+    config.lobbyJoinTimeoutTicks = 24
+    config.minPlayers = 4
+    config.gameOverTicks = 4
+    createThread(serverThread, serve,
+      ServerArgs(config: config, port: NoShowPort, replayPath: replayPath,
+        resultsPath: resultsPath, failurePath: failurePath))
+    let pool = newCurlPool(2)
+    var healthy = false
+    for attempt in 0 ..< 200:
+      sleep(100)
+      try:
+        if pool.get(NoShowBase & "/healthz").code == 200:
+          healthy = true
+          break
+      except CatchableError:
+        discard
+    check healthy
+    var wrote = false
+    for attempt in 0 ..< 600:
+      sleep(100)
+      if fileExists(resultsPath) and getFileSize(resultsPath) > 10:
+        wrote = true
+        break
+    check wrote
+    # the no-show is named…
+    check fileExists(failurePath)
+    let failure = parseJson(readFile(failurePath))
+    check failure["failed_policy_index"].getInt == 0
+    check "never joined the lobby" in failure["message"].getStr
+    # …and the episode still reached a normal ending, scored, with a replay.
+    let results = parseJson(readFile(resultsPath))
+    check results["reason"].getStr in [ReasonComplete, ReasonDeadline]
+    check results["scores"].len == CabinetCount
+    check getFileSize(replayPath) > 500
+    # /healthz and /global keep answering through the 20 s shutdown grace: the
+    # platform runner pings after the artifacts land, and a server that had
+    # already exited would be read as a crashed episode. 15 s, per §Tests 11.
+    let graceUntil = getTime() + initDuration(seconds = 15)
+    var pings = 0
+    while getTime() < graceUntil:
+      sleep(1000)
+      check pool.get(NoShowBase & "/healthz").code == 200
+      check pool.get(NoShowBase & "/global").code == 200
+      inc pings
+    check pings >= 14
+    joinThread(serverThread)
 
   test "an input mask from a seat is DISCARDED and a non-registration chat is dropped":
     # The seat's only authored message is its registration; everything else on

@@ -103,6 +103,15 @@ proc lobbyJoinTimedOut*(sim: SimServer): bool =
   sim.phase == Lobby and sim.config.lobbyJoinTimeoutTicks > 0 and
     sim.lobbyTicks >= sim.config.lobbyJoinTimeoutTicks
 
+proc lobbyBudgetSpent*(sim: SimServer): bool =
+  ## The same fact WITHOUT the phase clause, for a caller that polls BETWEEN
+  ## ticks. `step` increments `lobbyTicks` and force-starts in the same tick,
+  ## so a server loop that checks `lobbyJoinTimedOut` once per frame sees
+  ## `budget - 1` and then a phase that has already moved on: it never
+  ## observes the expiry at all.
+  sim.config.lobbyJoinTimeoutTicks > 0 and
+    sim.lobbyTicks >= sim.config.lobbyJoinTimeoutTicks
+
 proc logGameEvent*(sim: SimServer, text: string) =
   if sim.gameEventLoggingEnabled:
     echo text
