@@ -16,19 +16,21 @@ let
   worker = sourceText("replay-viewer/static_replay_worker.js")
   flags = sourceText("replay-viewer/config.nims")
 
-const ChromeCommonBytes = 40022
-  ## chrome_common.js is copied BYTE-FOR-BYTE from `Metta-AI/coworld-ctf`. The
-  ## byte count is pinned here (nimble's sha1 module is not a dependency of
-  ## this repo, and a length plus the structural checks below is enough to
-  ## catch an edit): if this number moves, the file was touched, and the design
-  ## note's pin says it must not be.
+const ChromeCommonBytes = 40037
+  ## chrome_common.js is `Metta-AI/coworld-ctf`'s copy plus the fleet-wide
+  ## replay transport patch (the 0.5x speed chip: SPEEDS fallback and the
+  ## speed→command map gain 0.5/'5'). The byte count is pinned here (nimble's
+  ## sha1 module is not a dependency of this repo, and a length plus the
+  ## structural checks below is enough to catch an edit): if this number
+  ## moves, the file was touched beyond that patch.
 
 suite "viewer":
-  test "chrome_common.js is byte-identical to the starter's copy":
-    # The design's pin: ZERO edits. Its CTF-specific paths stay in the file and
-    # are inert because the corresponding state fields are simply absent from
-    # the cabinet's stream. Every cabinet-specific readout lives in the
-    # appended game block.
+  test "chrome_common.js is the starter's copy plus the transport patch":
+    # The design's pin: the ONLY edits are the fleet-wide 0.5x speed lines
+    # counted into ChromeCommonBytes above. Its CTF-specific paths stay in the
+    # file and are inert because the corresponding state fields are simply
+    # absent from the cabinet's stream. Every cabinet-specific readout lives
+    # in the appended game block.
     checkpoint("chrome_common.js is " & $chrome.len & " bytes")
     check chrome.len == ChromeCommonBytes
     check "window.ChromeCommon = function (ctx)" in chrome

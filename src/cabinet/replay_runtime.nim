@@ -89,7 +89,7 @@ proc buildReplayViewerPacket*(
     sim.buildStateJson(
       events,
       replay.playing,
-      replay.replaySpeed(),
+      replay.replayDisplaySpeed(),
       replay.replayMaxTick(),
       replay.looping,
       true,
@@ -118,6 +118,7 @@ proc buildLiveViewerPacket*(
   result.addSprite(
     BroadcastChromeSpriteId, 1, 1, [0'u8, 0, 0, 0],
     sim.buildStateJson(
-      events, true, speed, maxTick, false, false, -1, sim.gameStartTick, 0,
+      events, true, float(speed), maxTick, false, false, -1,
+      sim.gameStartTick, 0,
       false, false, @[], @[], nil))
   discard tick
