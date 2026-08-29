@@ -17,7 +17,9 @@ proc jsIntArray(values: openArray[int]): string =
   result.add "]"
 
 const WireConstantsJs* =
-  "window.CABINET_WIRE={speeds:" & jsIntArray(PlaybackSpeeds) &
+  # 0.5 is the replay-only half speed (ReplayHalfSpeedIndex, command '5');
+  # it rides ahead of the engine's integer PlaybackSpeeds.
+  "window.CABINET_WIRE={speeds:[0.5," & jsIntArray(PlaybackSpeeds)[1..^1] &
   ",fps:" & $TargetFps &
   ",chromeSpriteId:" & $BroadcastChromeSpriteId &
   ",shotFxTicks:" & $ShotFxTicks &
@@ -26,9 +28,10 @@ const WireConstantsJs* =
   ",boardH:" & $MapHeight &
   "};window.CTF_WIRE=window.CABINET_WIRE;"
   ## The `CTF_WIRE` alias is deliberate and is the ONLY line that mentions it:
-  ## `client/chrome_common.js` is copied BYTE-FOR-BYTE from the starter and
-  ## reads `window.CTF_WIRE`, so the block publishes both names rather than
-  ## editing a file whose sha256 is pinned by tests/test_viewer.nim.
+  ## `client/chrome_common.js` is the starter's copy (plus the fleet-wide
+  ## 0.5x transport patch) and reads `window.CTF_WIRE`, so the block publishes
+  ## both names rather than rewiring a file whose byte count is pinned by
+  ## tests/test_viewer.nim.
 
 const WireConstantsMarker* = "<!-- WIRE_CONSTANTS -->"
 

@@ -328,7 +328,7 @@ proc buildStateJson*(
   sim: SimServer,
   events: JsonNode,
   playing: bool,
-  speed: int,
+  speed: float,
   maxTick: int,
   looping: bool,
   transportEnabled: bool,
