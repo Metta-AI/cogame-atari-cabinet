@@ -14,12 +14,12 @@ The phase-60 substitute for SPEC §Definition of done check 4:
     python3 tools/replay_summary.py /tmp/ep.replay > /tmp/ep.json
     jq -e . /tmp/ep.json >/dev/null                       # strict UTF-8 JSON
     jq -r '.protocol, .rom, .results.reason, .results.endRule' /tmp/ep.json
-    jq -r '[.stances[]|select(.source=="llm")]|length, .fallbacks' /tmp/ep.json
-    jq -r '[.stances[]|select(.source=="llm")|.aim_at]|unique' /tmp/ep.json
+    jq -r '[.stances[]|select(.source=="external")]|length, .fallbacks' /tmp/ep.json
+    jq -r '[.stances[]|select(.source=="external")|.aim_at]|unique' /tmp/ep.json
 
 Require `protocol == "atari-cabinet/v1"`, `results.reason == "complete"` (or
 the declared-acceptable `deadline`), `results.saves` summing above 0, and the
-champion seats' stances `source == "llm"` with VARYING stance / aim_at values —
+champion seats' stances `source == "external"` with VARYING stance / aim_at values —
 not all fallbacks, and not a constant stance.
 """
 

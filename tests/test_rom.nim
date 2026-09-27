@@ -99,7 +99,6 @@ suite "rom":
     check config.startingLives == 9        ## the explicit key beat the preset
     check config.numAgents == CabinetCount
     check config.maxTicks == 1440
-    check config.turnSpacingMs == 0
     let episode = runEpisode(config)
     check episode.sim.phase == GameOver
     check episode.sim.endReason == ReasonComplete

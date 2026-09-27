@@ -1,8 +1,5 @@
-# Build Docker. ONE image, TWO entrypoints: /bin/atari-cabinet (the game
-# server) and /bin/atari-cabinet-player (the thin seat registrar). The policy
-# set is env-switched inside this same image (PLAYER_PROMPT vs PLAYER_SCRIPTED),
-# which is what keeps a champion and a scripted filler byte-identical apart
-# from their environment.
+# One image, two entrypoints. The game validates and resolves complete orders;
+# the ordinary player owns scripted and prompt decisions and credentials.
 FROM debian:bookworm-slim AS build
 
 RUN apt-get update && \

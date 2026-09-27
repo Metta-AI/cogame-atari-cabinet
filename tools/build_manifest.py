@@ -120,12 +120,6 @@ def config_schema() -> dict:
             "turnTicks": int_prop(24, 600, 120,
                                   "the LLM decision cadence, in ticks"),
             "turnBudgetMs": int_prop(2000, 60000, 16000),
-            "attempt1Ms": int_prop(1000, 30000, 9000),
-            "retryMs": int_prop(1000, 30000, 5000),
-            "turnSpacingMs": int_prop(0, 60000, 12000,
-                                      "inter-batch wall floor: 4 requests per "
-                                      "12 s keeps the episode under the "
-                                      "sidecar's 30 rpm cap"),
             "wallClockBudgetSeconds": int_prop(30, 720, 660),
             "lobbyJoinTimeoutTicks": int_prop(0, 7200, 2880),
             "startWaitTicks": int_prop(0, 240, 24),
@@ -133,8 +127,6 @@ def config_schema() -> dict:
             "fastMode": {"type": "boolean", "default": True},
             "showPlayerLabels": {"type": "boolean", "default": False},
             "speed": int_prop(1, 16, 1),
-            "model": {"type": "string"},
-            "maxOutputTokens": int_prop(200, 4000, 900),
             "rom": {
                 "type": "string",
                 "enum": ["warlords", "quadrapong", "foozpong"],
@@ -175,7 +167,7 @@ def results_schema() -> dict:
             "aliases": seat_array({"type": "string"}),
             "cabinets": seat_array(integer),
             "policyKinds": seat_array({"type": "string",
-                                       "enum": ["llm", "scripted"]}),
+                                       "enum": ["prompt", "scripted", "external", "fallback"]}),
             "scores": seat_array(number),
             "win": seat_array({"type": "boolean"}),
             "placements": seat_array({"type": "integer", "minimum": 1,
@@ -190,7 +182,7 @@ def results_schema() -> dict:
             "saves": seat_array(integer),
             "catches": seat_array(integer),
             "bricksLeft": seat_array(integer),
-            "llmTurns": seat_array(integer),
+            "externalTurns": seat_array(integer),
             "fallbackTurns": seat_array(integer),
             "finalTick": integer,
             "reason": {"type": "string",
@@ -260,9 +252,6 @@ def variant_game_config(variant: dict) -> dict:
         "maxGames": 1,
         "turnTicks": 120,
         "turnBudgetMs": 16000,
-        "attempt1Ms": 9000,
-        "retryMs": 5000,
-        "turnSpacingMs": 12000,
         "wallClockBudgetSeconds": 660,
         "lobbyJoinTimeoutTicks": 2880,
         "fastMode": True,
@@ -291,15 +280,6 @@ def build() -> dict:
                 "type": "game",
                 "image": image,
                 "run": ["/bin/atari-cabinet"],
-                "env": {
-                    # Without this the hosted container never receives the
-                    # secret and every league episode plays scripted while
-                    # local certify still passes (hive, 2026-08-23). The
-                    # namespace must equal game.name exactly
-                    # (cooperative-hunting, 2026-08-25).
-                    "ANTHROPIC_API_KEY_URI":
-                        "secret://coworld/%s/anthropic_api_key" % GAME_NAME
-                },
                 "source_url": source_url,
             },
             # Nested under `game`, not top-level; no top-level version and no
@@ -373,7 +353,6 @@ def build() -> dict:
                 "maxGames": 1,
                 "turnTicks": 120,
                 "turnBudgetMs": 16000,
-                "turnSpacingMs": 0,
                 "wallClockBudgetSeconds": 180,
                 "lobbyJoinTimeoutTicks": 720,
                 "fastMode": True,

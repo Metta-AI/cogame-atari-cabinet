@@ -58,9 +58,6 @@ suite "locality":
     game.phase = Playing
     var engine = initDecisionEngine(game)
     for seat in 0 ..< CabinetCount:
-      engine.seats[seat].prompt =
-        "SECRET-PROMPT-" & $seat & " never leaves the server"
-      engine.seats[seat].isLlm = true
       var stance = defaultStance()
       stance.note = "SECRET-NOTE-" & $seat
       stance.say = "SECRET-SAY-" & $seat

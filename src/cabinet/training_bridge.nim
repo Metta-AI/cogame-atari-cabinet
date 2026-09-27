@@ -2,7 +2,7 @@
 ## Reuses the hosted view, stance parser, autopilot, and simulator.
 
 import std/[hashes, json, os]
-import sim, decide, stances, baselines, control
+import sim, decide, stances, baselines, control, numeric_codec
 
 const SystemPrompt = "Play one Atari Cabinet seat. Reply with a JSON stance: " &
   "{\"stance\":\"guard|aim|camp|catch|chase\"," &
@@ -36,8 +36,10 @@ proc stanceJson(stance: CabinetStance): JsonNode =
 proc currentDecision(): JsonNode =
   let turn = game.gameTicksElapsed() div game.config.turnTicks
   %*{
-    "kind": "decision", "decision_id": decisionId,
-    "seat": actingSeat, "turn": turn,
+    "kind": "decision", "game": "atari-cabinet", "decision_id": decisionId,
+    "seat": actingSeat, "engine_seat": game.cabinetOfSeat(actingSeat), "turn": turn,
+    "semantic_view": parseJson(engine.seatViewJson(game, actingSeat, turn)),
+    "inbox": [], "speech_messages": [], "typed_question": newJNull(),
     "messages": [
       {"role": "system", "content": SystemPrompt},
       {"role": "user", "content": engine.seatViewJson(game, actingSeat, turn)},
@@ -83,7 +85,11 @@ proc reset(command: JsonNode): JsonNode =
 proc teacher(): JsonNode =
   let cabinet = game.cabinetOfSeat(actingSeat)
   let turn = game.gameTicksElapsed() div game.config.turnTicks
-  %*{"response": $stanceJson(game.baselineStance(cabinet, blBulwark, turn))}
+  let stance = game.baselineStance(cabinet, blBulwark, turn)
+  let action = decodeActions(parseJson(engine.seatViewJson(game, actingSeat, turn)), encodeStance(stance))
+  action.delete("note")
+  action.delete("say")
+  %*{"response": $action}
 
 proc step(command: JsonNode): JsonNode =
   if command["decision_id"].getInt() != decisionId:
@@ -146,6 +152,12 @@ when isMainModule:
     let response = case command["kind"].getStr()
       of "reset": reset(command)
       of "teacher": teacher()
+      of "encode":
+        numericEncoding(parseJson(engine.seatViewJson(game, actingSeat,
+          game.gameTicksElapsed() div game.config.turnTicks)), decisionId)
+      of "decode":
+        %*{"response": $decodeActions(parseJson(engine.seatViewJson(game,
+          actingSeat, game.gameTicksElapsed() div game.config.turnTicks)), command["actions"])}
       of "step": step(command)
       else: raise newException(ValueError, "Unknown bridge command")
     stdout.writeLine($response)
