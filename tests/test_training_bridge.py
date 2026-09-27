@@ -19,7 +19,7 @@ def request(process: subprocess.Popen[str], command: dict) -> dict:
 with tempfile.TemporaryDirectory() as directory:
     binary = Path(directory) / "atari-cabinet-training-bridge"
     subprocess.run(
-        ["nim", "c", "--hints:off", "--path:src", f"--out:{binary}",
+        ["nim", "c", "--hints:off", "--path:src", f"--out:{binary}", f"--nimcache:{directory}/cache",
          "src/cabinet/training_bridge.nim"],
         cwd=ROOT,
         check=True,
@@ -45,10 +45,23 @@ with tempfile.TemporaryDirectory() as directory:
                     invalid = request(process, {"kind": "step", "decision_id": decisions,
                                                 "response": "not JSON"})
                     assert invalid["kind"] == "rejected"
-                    teacher = request(process, {"kind": "teacher"})["response"]
+                    encoding = request(process, {"kind": "encode"})
+                    assert encoding["decision_id"] == decisions
+                    assert len(encoding["values"]) == 115
+                    assert [len(head["choices"]) for head in encoding["action_heads"]] == [5, 4, 5, 87, 49, 256]
+                    assert sum(len(head["choices"]) for head in encoding["action_heads"]) == 406
+                    teacher_reply = request(process, {"kind": "teacher"})
+                    teacher = teacher_reply["response"]
+                    original = json.loads(teacher)
+                    indices = [head["choices"].index(original[head["name"]])
+                               for head in encoding["action_heads"]]
+                    decoded = request(process, {"kind": "decode", "actions": indices})["response"]
+                    numeric = json.loads(decoded)
+                    for field in ("stance", "target_ball", "aim_at", "post", "lead_ticks", "aggression"):
+                        assert numeric[field] == original[field]
                     assert json.loads(teacher)["stance"] in {"guard", "aim", "camp", "catch", "chase"}
                     result = request(process, {"kind": "step", "decision_id": decisions,
-                                               "response": teacher})
+                                               "response": decoded})
                     assert result["kind"] == "accepted"
                     assert result["action"]["stance"] == json.loads(teacher)["stance"]
                     observation = result["observation"]

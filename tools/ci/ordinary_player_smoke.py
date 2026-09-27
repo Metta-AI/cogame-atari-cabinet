@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import socket
@@ -15,7 +16,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--game', required=True)
 parser.add_argument('--player', required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--mode', choices=['mixed', 'no-credentials', 'disconnect'], default='mixed')
+parser.add_argument('--mode', choices=['mixed', 'no-credentials', 'disconnect', 'numeric'], default='mixed')
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=False)
 repo = Path(__file__).resolve().parents[2]
@@ -23,9 +24,29 @@ requests = []
 
 
 class Provider(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    disable_nagle_algorithm = True
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         requests.append(body)
+        if args.mode == 'numeric':
+            assert self.path == '/actions'
+            assert body['seat'] in (0, 1)
+            assert len(body['values']) == 115
+            assert all(math.isfinite(value) for value in body['values'])
+            assert len(body['action_mask']) == 406
+            heads = [2, 0, 0, 60, 3, 51]
+            offset = 0
+            for choice, size in zip(heads, (5, 4, 5, 87, 49, 256), strict=True):
+                assert body['action_mask'][offset + choice]
+                offset += size
+            reply = json.dumps({'actions': heads}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(reply)))
+            self.end_headers()
+            self.wfile.write(reply)
+            return
         action = {'stance': 'camp', 'target_ball': 'any', 'aim_at': 'none',
                   'post': 17, 'lead_ticks': 3, 'aggression': 0.2,
                   'note': 'stub-selected complete orders', 'say': 'player owns this'}
@@ -73,7 +94,9 @@ try:
         log = (args.output / f'player-{seat}.log').open('w')
         logs.append(log)
         env = dict(base_env, COWORLD_PLAYER_WS_URL=f'ws://127.0.0.1:{port}/player?slot={seat}&token=token-{seat}')
-        if seat < 2:
+        if seat < 2 and args.mode == 'numeric':
+            env['PLAYER_NUMERIC_URL'] = f'http://127.0.0.1:{provider.server_port}/actions'
+        elif seat < 2:
             env['PLAYER_PROMPT'] = 'Choose a complete stance from my private view.'
             if args.mode != 'no-credentials':
                 env['AWS_ENDPOINT_URL_BEDROCK_RUNTIME'] = f'http://127.0.0.1:{provider.server_port}'
@@ -94,7 +117,8 @@ try:
     assert exits == expected, exits
     results = json.loads((args.output / 'results.json').read_text())
     assert results['reason'] == 'complete', results
-    assert results['policyKinds'] == ['prompt', 'prompt', 'scripted', 'scripted'], results
+    assert results['policyKinds'] == (['external', 'external', 'scripted', 'scripted']
+                                      if args.mode == 'numeric' else ['prompt', 'prompt', 'scripted', 'scripted']), results
     assert sum(results['externalTurns']) > 0, results
     if args.mode == 'disconnect':
         assert results['fallbackTurns'][0] > 0, results
@@ -106,7 +130,13 @@ try:
         ['python3', str(repo / 'tools/replay_summary.py'), str(args.output / 'replay.bin')]))
     selected = [stance for stance in summary['stances']
                 if stance['note'] == 'stub-selected complete orders']
-    if args.mode == 'mixed':
+    if args.mode == 'numeric':
+        selected = [stance for stance in summary['stances']
+                    if stance['seat'] in (0, 1) and stance['stance'] == 'camp'
+                    and stance['post'] == 17.0 and stance['lead_ticks'] == 3
+                    and stance['aggression'] == 0.2]
+        assert len(requests) == 20 and len(selected) == 20, (len(requests), len(selected))
+    elif args.mode == 'mixed':
         assert len(requests) == 20 and len(selected) == 20, (len(requests), len(selected))
     elif args.mode == 'no-credentials':
         assert len(requests) == 0 and len(selected) == 0

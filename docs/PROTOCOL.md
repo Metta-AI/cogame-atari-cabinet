@@ -170,3 +170,28 @@ from a replay-mode server.
 `GET /healthz` and `GET /global` keep answering for a bounded ~20 s after the
 artifacts are written, because the episode runner pings `/global` with a 2 s
 deadline *after* the player pods start and a short episode can already be gone.
+
+
+## Numeric ordinary policies
+
+The bundled player accepts `PLAYER_NUMERIC_URL` pointing at a Metta frozen policy `/actions` endpoint.
+`PLAYER_NUMERIC_KEY` optionally authenticates that player-side request; neither setting enters the game.
+`PLAYER_POLICY_SESSION` identifies the episode. Each policy service owns one seat/session.
+
+The JSONL training bridge exposes `encode` and `decode` using the same private-view codec as the ordinary player.
+`encode` returns Metta's typed `DecisionEncoding`: 115 finite observation values and six independent action heads.
+
+| Head | Choices |
+| --- | --- |
+| stance | guard, aim, camp, catch, chase; catch masked when disabled |
+| target_ball | any or B1–B3; absent and non-live balls masked |
+| aim_at | none or four cabinet aliases; self and eliminated rivals masked |
+| post | whole cabinet units from -43 through 43 |
+| lead_ticks | all integers from 0 through 48 |
+| aggression | all 256 engine aggression bytes, divided by 255 |
+
+Numeric orders use empty note and speech fields. The post grid does not represent sub-unit positions.
+The observation encodes public board state, private own stance, ROM rules, and ball predictions.
+It excludes seeds, seat permutations, hidden policies, future serves, and inference settings.
+The teacher emits the six numeric action fields; its stance parameters match the native bulwark baseline.
+The game validates the decoded complete order through the existing ordinary action path.
