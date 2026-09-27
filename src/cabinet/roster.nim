@@ -230,7 +230,7 @@ proc playerResultsJson*(sim: SimServer): string =
     saves = newJArray()
     catches = newJArray()
     bricksLeft = newJArray()
-    llmTurns = newJArray()
+    externalTurns = newJArray()
     fallbackTurns = newJArray()
   for seat in 0 ..< seats:
     let cabinet = sim.cabinetOfSeat(seat)
@@ -251,7 +251,7 @@ proc playerResultsJson*(sim: SimServer): string =
     saves.add(%int(cab.saves))
     catches.add(%int(cab.catches))
     bricksLeft.add(%sim.bricksRemaining(cabinet))
-    llmTurns.add(%sim.llmTurns[seat])
+    externalTurns.add(%sim.externalTurns[seat])
     fallbackTurns.add(%sim.fallbackTurns[seat])
   $(%*{
     "names": names,
@@ -270,7 +270,7 @@ proc playerResultsJson*(sim: SimServer): string =
     "saves": saves,
     "catches": catches,
     "bricksLeft": bricksLeft,
-    "llmTurns": llmTurns,
+    "externalTurns": externalTurns,
     "fallbackTurns": fallbackTurns,
     "finalTick": sim.tickCount,
     "reason": (if sim.endReason.len > 0: sim.endReason else: ReasonComplete),
@@ -283,7 +283,7 @@ proc resultsKeys*(): seq[string] =
   ## `results_schema` by tests/test_manifest.nim.
   @["names", "aliases", "cabinets", "policyKinds", "scores", "win",
     "placements", "rom", "startingLives", "livesLeft", "concedes",
-    "knockouts", "chips", "saves", "catches", "bricksLeft", "llmTurns",
+    "knockouts", "chips", "saves", "catches", "bricksLeft", "externalTurns",
     "fallbackTurns", "finalTick", "reason", "endRule", "seed"]
 
 proc buildRewardPacket*(sim: SimServer): string =

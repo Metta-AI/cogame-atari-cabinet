@@ -1,25 +1,10 @@
-## The cabinet player container: a policy is just a prompt.
-##
-## This process is DELIBERATELY thin. It connects to its seat, sends ONE
-## Sprite v1 chat message carrying its registration, and then only receives.
-## Every decision happens inside the GAME server, because that is the only
-## container the platform injects the `anthropic_api_key` coworld secret into,
-## and because keeping the decision layer server-side is what makes the
-## recorded command-byte log reproducible with no network in the loop.
-##
-##   PLAYER_PROMPT        a strategy in plain English -> this seat is an LLM seat
-##   PLAYER_SCRIPTED      bulwark | spinner           -> this seat is scripted
-##   PLAYER_POLICY_LABEL  a free label for the replay's `register` record
-##
-## A seat that sets neither is `bulwark`. To field your own policy, reuse this
-## image and set PLAYER_PROMPT:
-##
-##   coworld upload-policy <cabinet-image> --name my-cabinet \
-##     --run /bin/atari-cabinet-player --secret-env PLAYER_PROMPT="<strategy>"
-
+## Ordinary cabinet player: complete standing orders over private seat views.
+## PLAYER_PROMPT and inference credentials belong to this process only.
 import std/[json, options, os, strutils]
 import bitworld/spriteprotocol
 import whisky
+import curly
+import cabinet/[sim_types, stances, baselines, player_baselines, player_llm]
 
 const
   ConnectAttempts = 240      ## 240 x 500 ms = 2 minutes of dialling.
@@ -29,12 +14,10 @@ const
   ReconnectAttempts = 6
 
 proc registrationBlob(prompt, scripted, policy: string): string =
-  ## The one registration message. `scripted` is JSON null when the seat is an
-  ## LLM seat, so the server can tell "no baseline named" from "bulwark named
-  ## explicitly".
+  ## Policy attribution only. Prompts remain local.
   var node = %*{
     "type": "register",
-    "prompt": prompt,
+    "kind": (if prompt.len > 0: "prompt" else: "scripted"),
     "policy": policy
   }
   if scripted.len > 0:
@@ -44,11 +27,7 @@ proc registrationBlob(prompt, scripted, policy: string): string =
   blobFromSpriteChat($node)
 
 proc readyBlob(): string =
-  ## The Sprite v1 player-ready packet (0x85). Legitimate here in a way it is
-  ## not for an ordinary player client: this seat sends NO inputs at all (the
-  ## server computes every command byte), so the dead-reckoning hazard
-  ## docs/PROTOCOL.md warns about cannot arise, and a fastMode server can
-  ## advance the tick as soon as every seat has acknowledged the frame.
+  ## Acknowledge binary viewer frames; standing orders use the Text channel.
   result = newString(1)
   result[0] = char(0x85)
 
@@ -65,6 +44,52 @@ when isMainModule:
       elif prompt.len > 0: "prompt"
       elif scripted.len > 0: scripted
       else: "bulwark"
+  let client =
+    if prompt.len > 0:
+      newLlmClient(getEnv("PLAYER_MODEL", "claude-haiku-4-5-20251001"),
+        parseInt(getEnv("PLAYER_MAX_OUTPUT_TOKENS", "900")))
+    else: nil
+
+  proc orders(decision: JsonNode): string =
+    let view = decision["view"]
+    var stance = view.baselineStance(parseBaseline(scripted))
+    var cabinet = -1
+    var cabinetOut: array[CabinetCount, bool]
+    for index, alias in CabinetAliases:
+      if alias == view["you"]["alias"].getStr():
+        cabinet = index
+        cabinetOut[index] = view["you"]["out"].getBool()
+      for rival in view["rivals"]:
+        if rival["alias"].getStr() == alias:
+          cabinetOut[index] = rival["out"].getBool()
+    doAssert cabinet >= 0
+    var live: seq[bool]
+    for ball in view["balls"]:
+      live.add(ball["state"].getStr() == "live")
+    if prompt.len > 0:
+      if client.disabled:
+        stance.source = ssFallback
+      else:
+        client.throttled = false
+        # The player performs inference. All seats run concurrently in their
+        # own containers; the game owns their shared response deadline.
+        let request = client.requestFor(SystemPrompt, userMessage(prompt, $view))
+        var batch: RequestBatch
+        batch.post(request.url, request.headers, request.body, "player")
+        let responses = client.curl.makeRequests(batch,
+          max(1, (decision["deadline_ms"].getInt() - 500) div 1000))
+        try:
+          let text = client.textOf(responses[0].response, responses[0].error, request.url)
+          stance = parseCabinetStance(extractJsonObject(text), cabinet,
+            cabinetOut, live, view["rules"]["catch_enabled"].getBool(), stance, false)
+        except CatchableError as error:
+          echo "cabinet player: provider failed: ", error.msg
+          stance.source = ssFallback
+    var action = stance.stanceRecordNode(decision["turn"].getInt(), 0, cabinet)
+    for field in ["k", "turn", "seat", "alias", "cabinet", "source", "latency_ms", "post_milli", "aggression_255"]:
+      action.delete(field)
+    $(%*{"type": "orders", "turn": decision["turn"], "action": action})
+
   echo "cabinet player: kind=",
     (if prompt.len > 0: "llm" else: "scripted"),
     " baseline=", (if scripted.len > 0: scripted else: "bulwark"),
@@ -112,6 +137,12 @@ when isMainModule:
         let received = socket.receiveMessage()
         if received.isNone:
           continue                    ## a read timeout, not a closed socket
+        if received.get().kind == TextMessage:
+          let decision = parseJson(received.get().data)
+          if decision["type"].getStr() == "decision":
+            doAssert decision["protocol"].getStr() == "atari-cabinet.player.v2"
+            socket.send(orders(decision), TextMessage)
+          continue
         inc sessionFrames
         if resends < RegistrationResends and
             sessionFrames mod ResendEveryFrames == 1:

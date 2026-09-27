@@ -78,12 +78,8 @@ const
   MaxTicksDefault* = 2880
   DefaultTurnTicks* = 120
   DefaultTurnBudgetMs* = 16_000
-  DefaultAttempt1Ms* = 9_000
-  DefaultRetryMs* = 5_000
-  DefaultTurnSpacingMs* = 12_000
   DefaultWallClockBudgetSeconds* = 660
   DefaultLobbyJoinTimeoutTicks* = 2880
-  DefaultMaxOutputTokens* = 900
   DefaultStartWaitTicks* = 24
   DefaultGameOverTicks* = 48
   MinPlayersDefault* = 4
@@ -236,12 +232,7 @@ type
     # the decision layer
     turnTicks*: int
     turnBudgetMs*: int
-    attempt1Ms*: int
-    retryMs*: int
-    turnSpacingMs*: int
     wallClockBudgetSeconds*: int
-    model*: string
-    maxOutputTokens*: int
     # the ROM preset (rom.nim applies it between defaults and explicit keys)
     rom*: string
     startingLives*: int

@@ -5,27 +5,38 @@
 `ws://<game>:8080/player?slot=<N>&token=<T>` — a bad slot or token is a **403
 before the upgrade**.
 
-A seat sends exactly **one kind of message it authors**: its registration, as a
-Sprite v1 chat frame (`0x81`), re-sent on the first ~10 s of frames because
-joins are slot-sequential and the lobby streams frames to a socket before it is
-admitted (the server holds an unappliable registration rather than dropping
-it):
+A seat registers policy metadata in a Sprite v1 chat frame (`0x81`), re-sent
+for the first ten seconds because admission is slot-sequential:
 
 ```json
-{"type":"register","prompt":"<strategy text or empty>",
- "scripted":"bulwark"|"spinner"|null,"policy":"<free label>"}
+{"type":"register","kind":"scripted","scripted":"bulwark","policy":"my-player"}
 ```
 
-`prompt` is capped at 4000 runes at the transport (over-long is truncated,
-never rejected) and is **never** written to the replay or the results. A seat
-that never registers, or registers with neither field, is `bulwark`.
+No prompt or inference credential is sent to the game. Registration affects
+spectator attribution only. Players acknowledge binary Sprite frames with
+Ready (`0x85`); raw input masks are ignored because the game compiles stances
+into command bytes.
 
-After that the seat only **receives**: one binary Sprite v1 frame per tick, and
-it answers each with the Ready packet (`0x85`). **SEATS SEND NO INPUTS.** The
-server computes every command byte, so any input mask arriving on a player
-socket is discarded — which is also why the Ready packet is legitimate here in
-a way it is not for an ordinary client: there is no dead-reckoned input to
-corrupt.
+At each turn the game sends all living connected seats a Text frame from one
+shared snapshot, before accepting any order:
+
+```json
+{"type":"decision","protocol":"atari-cabinet.player.v2","turn":11,
+ "deadline_ms":16000,"view":{"turn":11,"you":{},"balls":[],"rivals":[]}}
+```
+
+`view` is the full observation documented below. Players respond with a Text
+frame containing the complete stance:
+
+```json
+{"type":"orders","turn":11,"action":{"stance":"guard","target_ball":"any",
+ "aim_at":"none","post":0,"lead_ticks":12,"aggression":0.8,"note":"","say":""}}
+```
+
+The game rejects stale or malformed replies and accepts the first valid order
+per seat. All seats share one monotonic `turnBudgetMs` deadline. Disconnected
+seats immediately use native bulwark fallback; missing orders use it at the
+deadline. The game retains validation, repair, scoring, results, and replay.
 
 The per-seat frame carries the **whole board**: the arena, all four mouths
 (open or welded), every paddle, every brick and every ball with its trail.
@@ -35,9 +46,8 @@ real policy name is ever on a seat's screen.
 
 ## The board view a policy is asked about
 
-Every 5 s of sim time (120 ticks) the server composes this object, appends it
-to the seat's `PLAYER_PROMPT` under a "GUIDANCE FROM YOUR OPERATOR" heading,
-and asks Claude for a stance. All numbers are in **cabinet coordinates**
+Every 5 s of sim time (120 ticks) the game sends this private object to the
+ordinary player. All numbers are in **cabinet coordinates**
 (0..100 from the bottom-left corner, x right, y up), rounded to 2 decimals,
 with `along`/`depth` in the seat's own side-local frame.
 
@@ -56,7 +66,7 @@ with `along`/`depth` in the seat's own side-local frame.
             "vel": [0.61, -0.42], "speed": 0.74, "deg": 325.4,
             "last_touch": "BLUE", "held_by": null,
             "arrive_at": "GREEN", "arrive_in_ticks": 31,
-            "arrive_along": 3.20}, "… ballCount entries …"],
+            "arrive_along": 3.20, "arrive_in_ticks_for_you": 31}, "… ballCount entries …"],
  "rivals": ["… exactly three, alias / side / lives / out / bricks_left / paddle_along / score …"],
  "neighbours": {"plus_along": "YELLOW", "minus_along": "BLUE"},
  "rules": {"starting_lives": 3, "ball_count": 2, "brick_rows": 1,
@@ -66,9 +76,10 @@ with `along`/`depth` in the seat's own side-local frame.
  "your_last_stance": {"…": "the stance this seat set last turn, or null"}}
 ```
 
-`arrive_along` is `null` when that ball will not reach **this** seat's line
+`arrive_along` and `arrive_in_ticks_for_you` are `null` when that ball will not reach **this** seat's line
 inside the prediction bound; `arrive_at` names whichever cabinet's line it
-reaches first. The `arrive_*` triple is computed by **the same walk the
+reaches first. `arrive_in_ticks_for_you` gives the arrival time on this seat's line, which
+can differ from the first arrival on another cabinet. The `arrive_*` fields are computed by **the same walk the
 autopilot uses**, so a policy never has to guess at a quantity the engine
 already knows.
 
@@ -102,8 +113,8 @@ strings are accepted, `stance`/`target_ball`/`aim_at` are matched
 case-insensitively and inside prose (`"the red cabinet"`, `"ball 2"`), and the
 documented synonyms (`defend`→`guard`, `shoot`/`attack`→`aim`,
 `hold`/`sit`→`camp`, `grab`→`catch`, `rush`→`chase`) are accepted. Only when no
-object with at least one usable field can be recovered does the single retry
-fire, and then the `bulwark` fallback.
+object with at least one usable field can be recovered is the order rejected; the game uses `bulwark` if no valid order arrives
+before the common deadline.
 
 **Every recorded string is truncated on RUNE boundaries**, never bytes: a
 byte-truncated multi-byte character renders in a browser and then fails a
@@ -121,7 +132,7 @@ real policy names, `aliases` are the in-game ones, `cabinets` is `perm`.
 {"names": [], "aliases": [], "cabinets": [], "policyKinds": [], "scores": [],
  "win": [], "placements": [], "rom": "warlords", "startingLives": 3,
  "livesLeft": [], "concedes": [], "knockouts": [], "chips": [], "saves": [],
- "catches": [], "bricksLeft": [], "llmTurns": [], "fallbackTurns": [],
+ "catches": [], "bricksLeft": [], "externalTurns": [], "fallbackTurns": [],
  "finalTick": 2604, "reason": "complete", "endRule": "last_standing",
  "seed": 5140913}
 ```
@@ -144,7 +155,7 @@ The replay is the starter's **binary `COWLDCAB`** format:
 | config JSON | `seed`, `rom`, the fully resolved ROM preset, `perm`, `num_agents`, `maxTicks`, `turnTicks`, the whole geometry table, the reward constants, `players[].name` (real names), `slots[].alias`, `fastMode` |
 | joins / leaves | per seat: name, slot, token |
 | inputs | **the action log**: one command byte per seat per tick, written on change only |
-| chats | `register` / `stance` / `fallback` / `budget_guard` / `result` control records |
+| chats | `register` / `stance` / `fallback` / `result` control records |
 | hashes | one `gameHash` per tick |
 
 `tools/replay_summary.py` (Python 3 stdlib only) turns those bytes into one

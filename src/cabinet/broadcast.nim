@@ -195,7 +195,7 @@ proc rosterJson(sim: SimServer): JsonNode =
       "saves": int(sim.cabinets[cabinet].saves),
       "chips": int(sim.cabinets[cabinet].chips),
       "catches": int(sim.cabinets[cabinet].catches),
-      "llmTurns": sim.llmTurns[seat],
+      "externalTurns": sim.externalTurns[seat],
       "fallbackTurns": sim.fallbackTurns[seat],
       "placement": int(sim.cabinets[cabinet].placement)
     })

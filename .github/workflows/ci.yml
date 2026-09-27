@@ -101,6 +101,17 @@ jobs:
           cat nim.cfg
           echo "::endgroup::"
 
+      - name: Exercise ordinary scripted and prompt players
+        run: |
+          mkdir -p dist/ordinary
+          nim c -d:release --out:dist/ordinary/game src/atari_cabinet.nim
+          nim c -d:release --out:dist/ordinary/player src/atari_cabinet_player.nim
+          for mode in mixed no-credentials disconnect; do
+            python3 tools/ci/ordinary_player_smoke.py \
+              --game "$PWD/dist/ordinary/game" --player "$PWD/dist/ordinary/player" \
+              --output "$PWD/dist/ordinary/$mode" --mode "$mode"
+          done
+
       - name: Exercise training bridge across all ROMs
         run: python3 tests/test_training_bridge.py
 

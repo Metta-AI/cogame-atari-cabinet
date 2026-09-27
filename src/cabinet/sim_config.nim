@@ -31,12 +31,7 @@ proc defaultGameConfig*(): GameConfig =
     slots: @[],
     turnTicks: DefaultTurnTicks,
     turnBudgetMs: DefaultTurnBudgetMs,
-    attempt1Ms: DefaultAttempt1Ms,
-    retryMs: DefaultRetryMs,
-    turnSpacingMs: DefaultTurnSpacingMs,
     wallClockBudgetSeconds: DefaultWallClockBudgetSeconds,
-    model: "",
-    maxOutputTokens: DefaultMaxOutputTokens,
     rom: RomWarlords,
     startingLives: 3,
     ballCount: 2,
@@ -206,19 +201,8 @@ proc validate*(config: GameConfig) =
     raise newException(
       CabinetError,
       "Config field goalHalfCu is wider than the paddle can cover.")
-  # DEGRADE, NEVER HANG. The two batch deadlines must fit inside the per-turn
-  # budget, and a sub-second deadline is not the deadline it claims to be:
-  # curly hands it to CURLOPT_TIMEOUT, whose granularity is whole seconds and
-  # whose conversion FLOORS.
-  if config.attempt1Ms < 1000 or config.retryMs < 1000:
-    raise newException(
-      CabinetError,
-      "Config fields attempt1Ms and retryMs must be at least 1000 ms " &
-        "(curly's CURLOPT_TIMEOUT granularity is whole seconds).")
-  if config.attempt1Ms + config.retryMs > config.turnBudgetMs:
-    raise newException(
-      CabinetError,
-      "Config fields attempt1Ms + retryMs must fit inside turnBudgetMs.")
+  if config.turnBudgetMs < 1000:
+    raise newException(CabinetError, "Config field turnBudgetMs must be at least 1000 ms.")
   if config.wallClockBudgetSeconds <= 0:
     raise newException(
       CabinetError, "Config field wallClockBudgetSeconds must be positive.")
@@ -266,12 +250,7 @@ proc update*(config: var GameConfig, jsonText: string) =
   node.readConfigBool("closedRoster", config.closedRoster)
   node.readConfigInt("turnTicks", config.turnTicks)
   node.readConfigInt("turnBudgetMs", config.turnBudgetMs)
-  node.readConfigInt("attempt1Ms", config.attempt1Ms)
-  node.readConfigInt("retryMs", config.retryMs)
-  node.readConfigInt("turnSpacingMs", config.turnSpacingMs)
   node.readConfigInt("wallClockBudgetSeconds", config.wallClockBudgetSeconds)
-  node.readConfigString("model", config.model)
-  node.readConfigInt("maxOutputTokens", config.maxOutputTokens)
   node.readConfigInt("startingLives", config.startingLives)
   node.readConfigInt("ballCount", config.ballCount)
   node.readConfigInt("brickRows", config.brickRows)
@@ -369,11 +348,7 @@ proc configJson*(config: GameConfig): string =
     "closedRoster": config.closedRoster,
     "turnTicks": config.turnTicks,
     "turnBudgetMs": config.turnBudgetMs,
-    "attempt1Ms": config.attempt1Ms,
-    "retryMs": config.retryMs,
-    "turnSpacingMs": config.turnSpacingMs,
     "wallClockBudgetSeconds": config.wallClockBudgetSeconds,
-    "maxOutputTokens": config.maxOutputTokens,
     "rom": config.rom,
     "startingLives": config.startingLives,
     "ballCount": config.ballCount,
@@ -421,8 +396,6 @@ proc configJson*(config: GameConfig): string =
     "tokens": tokens,
     "slots": slots
   }
-  if config.model.len > 0:
-    node["model"] = %config.model
   if includePlayers:
     node["players"] = players
   $node

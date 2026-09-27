@@ -39,8 +39,8 @@ suite "startup":
   test "an out-of-bounds knob is refused before the episode starts":
     for bad in ["""{"startingLives":99}""", """{"ballCount":9}""",
                 """{"goalHalfCu":2}""", """{"maxTicks":1000,"turnTicks":120}""",
-                """{"attempt1Ms":100}""",
-                """{"attempt1Ms":9000,"retryMs":9000,"turnBudgetMs":10000}"""]:
+                """{"turnBudgetMs":100}""",
+                """{"turnBudgetMs":0}"""]:
       var config = defaultGameConfig()
       expect CabinetError:
         config.update(bad)

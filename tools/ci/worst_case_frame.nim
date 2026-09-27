@@ -69,7 +69,6 @@ proc worstCaseFrame*(
     "minPlayers": 4,
     "maxTicks": 1440,
     "startWaitTicks": 1,
-    "turnSpacingMs": 0,
     "players": [{"name": "P1"}, {"name": "P2"}, {"name": "P3"}, {"name": "P4"}],
     "tokens": ["token-0", "token-1", "token-2", "token-3"],
     "slots": [{"alias": "RED"}, {"alias": "BLUE"}, {"alias": "GREEN"},
@@ -104,7 +103,7 @@ proc worstCaseFrame*(
     var stance = parseCabinetStance(
       extractJsonObject(reply), cabinet, cabinetOut, live,
       config.catchEnabled, defaultStance(), false)
-    stance.source = ssLlm
+    stance.source = ssExternal
     stance.latencyMs = 1234
     game.applyStanceRecord(
       boundedStanceRecord(stance, 1, seat, cabinet))
