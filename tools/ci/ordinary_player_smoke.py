@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--game', required=True)
 parser.add_argument('--player', required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--mode', choices=['mixed', 'no-credentials', 'disconnect', 'numeric'], default='mixed')
+parser.add_argument('--mode', choices=['mixed', 'no-credentials', 'disconnect', 'numeric', 'sidecar'], default='mixed')
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=False)
 repo = Path(__file__).resolve().parents[2]
@@ -47,6 +47,12 @@ class Provider(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(reply)
             return
+        if args.mode == 'sidecar':
+            assert self.path == '/v1/messages'
+            assert self.headers['X-Coworld-Player-Slot'] in ('0', '1')
+            assert body['model'] == 'fixture/model'
+            assert 'anthropic_version' not in body
+            assert self.headers.get('x-api-key') is None
         action = {'stance': 'camp', 'target_ball': 'any', 'aim_at': 'none',
                   'post': 17, 'lead_ticks': 3, 'aggression': 0.2,
                   'note': 'stub-selected complete orders', 'say': 'player owns this'}
@@ -98,7 +104,10 @@ try:
             env['PLAYER_NUMERIC_URL'] = f'http://127.0.0.1:{provider.server_port}/actions'
         elif seat < 2:
             env['PLAYER_PROMPT'] = 'Choose a complete stance from my private view.'
-            if args.mode != 'no-credentials':
+            if args.mode == 'sidecar':
+                env['COWORLD_LLM_ENDPOINT'] = f'http://127.0.0.1:{provider.server_port}'
+                env['COWORLD_LLM_MODEL'] = 'fixture/model'
+            elif args.mode != 'no-credentials':
                 env['AWS_ENDPOINT_URL_BEDROCK_RUNTIME'] = f'http://127.0.0.1:{provider.server_port}'
                 env['AWS_BEARER_TOKEN_BEDROCK'] = 'local-stub-only'
         else:
@@ -136,7 +145,7 @@ try:
                     and stance['post'] == 17.0 and stance['lead_ticks'] == 3
                     and stance['aggression'] == 0.2]
         assert len(requests) == 20 and len(selected) == 20, (len(requests), len(selected))
-    elif args.mode == 'mixed':
+    elif args.mode in ('mixed', 'sidecar'):
         assert len(requests) == 20 and len(selected) == 20, (len(requests), len(selected))
     elif args.mode == 'no-credentials':
         assert len(requests) == 0 and len(selected) == 0

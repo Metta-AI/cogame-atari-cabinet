@@ -94,7 +94,7 @@ when isMainModule:
         client.throttled = false
         # The player performs inference. All seats run concurrently in their
         # own containers; the game owns their shared response deadline.
-        let request = client.requestFor(SystemPrompt, userMessage(prompt, $view))
+        let request = client.requestFor(SystemPrompt, userMessage(prompt, $view), seat)
         var batch: RequestBatch
         batch.post(request.url, request.headers, request.body, "player")
         let responses = client.curl.makeRequests(batch,
