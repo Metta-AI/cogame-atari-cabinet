@@ -1,29 +1,5 @@
-## The game server: mummy HTTP + websockets, the join/auth path, the per-turn
-## decision layer, the recorded command-byte log and the artifact writes.
-##
-## Inherited from the starter's `src/ctf/server.nim` with FIVE named edits:
-##
-## 1. INPUT SOURCE. Where the starter reads `appState.inputMasks` (the socket)
-##    into `inputs[playerIndex]`, the cabinet calls `control.paddleCommand`
-##    for all four cabinets and passes the command-byte array into `sim.step`.
-##    Player sockets contribute NO input: any input mask arriving on a player
-##    socket is discarded.
-## 2. REPLAY INPUT WRITE. `writeInputFrameMasks` (the press/release wrapper) is
-##    DELETED — its `repeatedPressedMask` logic is button semantics and would
-##    corrupt a value byte. The cabinet calls `writeInputMaskChange` directly
-##    and `decodePaddle` replaces `decodeInputMask`, with the shared
-##    `cmd >= 243 -> 40` repair.
-## 3. TURN BOUNDARY. Immediately before stepping a tick where
-##    `tick mod turnTicks == 0`, the loop runs `decide.turn`, which enforces
-##    the inter-batch floor, issues ONE parallel batch over the ALIVE seats,
-##    applies the two deadlines and writes the stance / fallback records — all
-##    inside a monotonic `turnBudgetMs` bound.
-## 4. WALL-CLOCK STOP. A `wallClockBudgetSeconds` check at the top of every
-##    loop iteration forces GameOver / deadline / wall_clock.
-## 5. SHUTDOWN GRACE. `/healthz` and `/global` keep answering for a bounded
-##    ~20 s after the artifacts are written, then the process exits: the
-##    episode runner pings `/global` with a 2 s deadline AFTER the player pods
-##    start, and a short episode can already be gone.
+## Game-owned simultaneous order collection, validation, simulation and replay.
+## Player processes own all strategy and inference decisions.
 
 import std/[json, locks, monotimes, nativesockets, os, strutils, tables, times]
 import bitworld/client as bitworldClient
@@ -46,6 +22,7 @@ type
     replayLoaded: bool
     replayServerMode: bool
     chatMessages: Table[WebSocket, string]
+    orders: Table[WebSocket, seq[string]]
     playerIndices: Table[WebSocket, int]
     playerAddresses: Table[WebSocket, string]
     playerSlots: Table[WebSocket, int]
@@ -137,6 +114,7 @@ proc removePlayerWebSocketState(websocket: WebSocket): int =
     appState.playerIndices.del(websocket)
   appState.playerViewers.del(websocket)
   appState.chatMessages.del(websocket)
+  appState.orders.del(websocket)
   appState.playerAddresses.del(websocket)
   appState.playerSlots.del(websocket)
   appState.playerTokens.del(websocket)
@@ -304,6 +282,12 @@ proc websocketHandler(
   of MessageEvent:
     if message.kind == Ping:
       websocket.send(message.data, Pong)
+    elif message.kind == TextMessage:
+      {.gcsafe.}:
+        withLock appState.lock:
+          if websocket in appState.playerIndices and
+              appState.orders.getOrDefault(websocket).len < 16:
+            appState.orders.mgetOrPut(websocket, @[]).add(message.data)
     elif message.kind == BinaryMessage:
       {.gcsafe.}:
         withLock appState.lock:
@@ -337,9 +321,8 @@ proc serverThreadProc(args: ServerThreadArgs) {.thread.} =
 
 proc parseRegistration*(
   text: string
-): tuple[ok: bool, prompt, scripted, policy: string] =
-  ## A seat's ONE Sprite v1 chat message, read as its registration:
-  ##   {"type":"register","prompt":"…","scripted":"bulwark"|null,"policy":"…"}
+): tuple[ok: bool, kind, scripted, policy: string] =
+  ## Cosmetic attribution only; no strategy or credential enters the game.
   ## Anything that is not that object is not a registration and is dropped:
   ## cabinets do not chat.
   result = (false, "", "", "")
@@ -353,7 +336,8 @@ proc parseRegistration*(
   if node.kind != JObject or node{"type"}.getStr() != "register":
     return
   result.ok = true
-  result.prompt = node{"prompt"}.getStr()
+  let kind = node{"kind"}.getStr("external")
+  result.kind = if kind in ["prompt", "scripted"]: kind else: "external"
   if not node{"scripted"}.isNil and node{"scripted"}.kind == JString:
     result.scripted = node{"scripted"}.getStr()
   result.policy = node{"policy"}.getStr()
@@ -606,13 +590,11 @@ proc runServerLoop*(
             var policy = engine.seats[index]
             let first = not policy.registered
             policy.registered = true
-            policy.prompt = registration.prompt.truncateRunes(MaxPromptRunes)
-            policy.isLlm = policy.prompt.len > 0
+            policy.kind = registration.kind.truncateRunes(MaxPolicyLabelRunes)
             policy.baseline = parseBaseline(registration.scripted)
             policy.label =
               if registration.policy.len > 0: registration.policy
-              elif policy.isLlm: "prompt"
-              else: $policy.baseline
+              else: "external"
             engine.seats[index] = policy
             game.seatPolicyKind[index] = engine.policyKind(index)
             if first:
@@ -657,24 +639,68 @@ proc runServerLoop*(
         liveSpeedIndex.applySpeedCommand(command)
       if seatsSeated and game.phase == Playing:
         let
-          elapsedSeconds = (getMonoTime() - episodeStart).inSeconds.int
           turnTicks = max(1, config.turnTicks)
           turnIndex = game.gameTicksElapsed() div turnTicks
         if game.gameTicksElapsed() mod turnTicks == 0 and
             turnIndex != lastTurnKey:
           lastTurnKey = turnIndex
           inc turnsRun
-          let records = engine.turn(game, turnIndex, elapsedSeconds)
-          for record in records:
-            replayWriter.writeChat(tickTime(game.tickCount), 0, record)
+          var waiting, connected: array[CabinetCount, bool]
+          let started = getMonoTime()
+          {.gcsafe.}:
+            withLock appState.lock:
+              appState.orders.clear()
+          # Every seat receives the same simulation snapshot before any order
+          # is applied. Only its own preceding stance appears in its view.
+          for position, websocket in sockets:
+            let seat = playerIndices[position]
+            if seat < 0 or seat >= CabinetCount or
+                game.cabinets[game.cabinetOfSeat(seat)].isOut:
+              continue
+            waiting[seat] = true
+            connected[seat] = true
+            let decision = %*{
+              "type": "decision", "protocol": "atari-cabinet.player.v2",
+              "turn": turnIndex, "deadline_ms": config.turnBudgetMs,
+              "view": parseJson(engine.seatViewJson(game, seat, turnIndex))
+            }
+            websocket.send($decision, TextMessage)
+          while waiting.contains(true) and
+              (getMonoTime() - started).inMilliseconds < config.turnBudgetMs:
+            var pending: seq[(int, string)]
+            {.gcsafe.}:
+              withLock appState.lock:
+                for position, websocket in sockets:
+                  let seat = playerIndices[position]
+                  if seat < 0 or seat >= CabinetCount or not waiting[seat]:
+                    continue
+                  if websocket in appState.closedSockets:
+                    waiting[seat] = false
+                    engine.fallback(game, seat)
+                    replayWriter.writeChat(tickTime(game.tickCount), seat,
+                      fallbackRecord(turnIndex, seat, 0, "disconnect", "player disconnected"))
+                  for text in appState.orders.getOrDefault(websocket):
+                    pending.add((seat, text))
+                  appState.orders.del(websocket)
+            for (seat, text) in pending:
+              if waiting[seat] and engine.acceptOrders(game, seat, turnIndex, text):
+                waiting[seat] = false
+                engine.stances[seat].latencyMs = (getMonoTime() - started).inMilliseconds.int
+            if waiting.contains(true):
+              sleep(1)
           for seat in 0 ..< CabinetCount:
+            if game.cabinets[game.cabinetOfSeat(seat)].isOut:
+              continue
+            if waiting[seat] or not connected[seat]:
+              engine.fallback(game, seat)
+              replayWriter.writeChat(tickTime(game.tickCount), seat,
+                fallbackRecord(turnIndex, seat, 0, "timeout", "no valid player orders before deadline"))
+          for seat in 0 ..< CabinetCount:
+            if game.cabinets[game.cabinetOfSeat(seat)].isOut:
+              continue
             if not engine.haveStance[seat]:
               continue
             let stance = engine.stances[seat]
-            case stance.source
-            of ssLlm: inc game.llmTurns[seat]
-            of ssFallback: inc game.fallbackTurns[seat]
-            of ssScripted: discard
             let record = boundedStanceRecord(
               stance, turnIndex, seat, game.cabinetOfSeat(seat))
             replayWriter.writeChat(tickTime(game.tickCount), seat, record)

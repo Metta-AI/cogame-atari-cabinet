@@ -27,7 +27,7 @@ type
     stChase = "chase"
 
   StanceSource* = enum
-    ssLlm = "llm"
+    ssExternal = "external"
     ssScripted = "scripted"
     ssFallback = "fallback"
 
@@ -247,7 +247,7 @@ proc parseCabinetStance*(
   if payload.isNil or payload.kind != JObject:
     raise newException(StanceError, "reply is not a JSON object")
   result = defaultStance()
-  result.source = ssLlm
+  result.source = ssExternal
   var usable = 0
 
   # note / say

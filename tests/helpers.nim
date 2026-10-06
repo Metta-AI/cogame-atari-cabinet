@@ -31,7 +31,6 @@ proc episodeConfig*(
     "minPlayers": 4,
     "maxTicks": maxTicks,
     "startWaitTicks": 1,
-    "turnSpacingMs": 0,
     "players": [{"name": "P1"}, {"name": "P2"}, {"name": "P3"}, {"name": "P4"}],
     "tokens": ["token-0", "token-1", "token-2", "token-3"],
     "slots": [{"alias": "RED"}, {"alias": "BLUE"}, {"alias": "GREEN"},

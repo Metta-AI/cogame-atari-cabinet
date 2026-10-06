@@ -262,7 +262,7 @@ proc applyReplayEvents(replay: var ReplayPlayer, sim: var SimServer) =
     let chat = replay.data.chats[replay.chatIndex]
     # CONTROL records (register / stance / fallback / budget_guard / result)
     # ride the chat stream as JSON objects and are told apart by a leading
-    # '{'. Only the `stance` records are re-applied, and only into
+    # '{'. Registration and stance records are re-applied only into
     # NON-HASHED presentation state, so the hash chain cannot move.
     if chat.message.len > 0 and chat.message[0] == '{':
       sim.applyStanceRecord(chat.message)

@@ -14,9 +14,9 @@ This file covers the things that are easy to get wrong.
   is the FIRST draw of the seeded stream and the replay's config JSON echoes
   it: a seed injected after the parse would publish a permutation the sim never
   played.
-- `src/atari_cabinet_player.nim` — the thin seat registrar (`/bin/atari-cabinet-player`).
-  It sends ONE registration chat frame, re-sends it for ~10 s, answers every
-  frame with the Ready packet, and **exits 0 on a dead socket**.
+- `src/atari_cabinet_player.nim` — the ordinary policy player. It receives
+  private `atari-cabinet.player.v2` decisions and returns complete stances.
+  Scripted and prompt decisions run here; credentials never enter the game.
 - `src/cabinet/` — the sim. `sim.nim` imports and RE-EXPORTS every module, so
   `import cabinet/sim` sees everything.
 
@@ -33,7 +33,7 @@ This file covers the things that are easy to get wrong.
   | `stances.nim` | the reply schema, the tolerant parser and the RUNE discipline |
   | `control.nim` | the autopilot: one command byte per cabinet per tick |
   | `baselines.nim` | `bulwark`, `spinner` and the three tunables |
-  | `llm.nim` / `decide.nim` | the Bedrock/Anthropic transport and the per-turn PARALLEL batch |
+  | `player_llm.nim` / `decide.nim` | player-only inference transport / game observations, validation and fallback |
   | `global.nim` | the pixie board bake and the Sprite v1 packet |
   | `broadcast.nim` | state deltas → events, and the one state JSON the chrome reads |
   | `server.nim` | mummy HTTP/websockets, the `COGAME_*` contract, the artifact writes |
@@ -159,15 +159,12 @@ PY
 - **Truncate every recorded string on RUNE boundaries.** A byte-truncated
   multi-byte character renders in a browser and then fails a strict UTF-8
   parser. `stances.nim` is the only place strings are shortened.
-- **One parallel LLM batch per turn.** The cabinet is a simultaneous-decision
-  game; seats queried one after another blow the wall-clock budget.
-  `decide.turnBatch` builds it and `tests/test_engine.nim` asserts every alive
-  seat is in it.
+- **One shared deadline per simultaneous turn.** Broadcast all seat views
+  before applying orders. The game must not import the inference transport.
 - **`num_agents` in every variant AND the certification fixture**, or the
   ladder schedules zero episodes.
-- **The secret namespace must equal `game.name`** exactly, and the game
-  runnable's `env` must carry `ANTHROPIC_API_KEY_URI`, or every league episode
-  plays scripted while local certify passes.
+- **Inference credentials belong to players.** Never add them to the game
+  runnable. External Metta policies own their own provider configuration.
 - **Bundled player `resources.limits.cpu` is `"1"`.** Anything lower is a 400
   at upload.
 - **A replay shorter than the viewer smoke's soak reads as "frozen".** The cert

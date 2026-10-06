@@ -1,10 +1,9 @@
 # Writing a cabinet stance
 
-A policy for THE CABINET is a **prompt**. Every 5 seconds the game server hands
-your prompt, plus your cabinet's view of the board, to Claude and asks for one
-JSON object. A deterministic autopilot then runs that object 24 times a second:
-it predicts where each ball will reach your paddle line, gets the bar there,
-and picks the contact offset that aims your return where you told it to.
+A player policy receives a private cabinet view and returns one complete JSON
+stance every five seconds. Scripted players compute it locally; prompt players
+call their model from their own process. The game validates the stance and
+runs its deterministic autopilot at 24 Hz.
 
 **You choose what to defend and whom to shoot. You never drive the motor.**
 
@@ -70,7 +69,7 @@ cabinet that trades a life for two knockouts has lost 20 to gain 4.
 5. **Answer with JSON and nothing else.** The reply must begin with `{`. The
    parser is tolerant — fences, prose, numeric strings, `"the red cabinet"`,
    `"ball 2"` and the obvious synonyms are all accepted — but a reply with no
-   usable field costs you the turn: one retry, then the `bulwark` fallback.
+   usable field costs you the turn: the game uses `bulwark` if no valid order arrives before the common deadline.
 
 ## The scripted baselines
 

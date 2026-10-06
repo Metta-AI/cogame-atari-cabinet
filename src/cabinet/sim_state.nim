@@ -29,7 +29,7 @@ type
     nextJoinOrder*: int
     seatNames*: array[CabinetCount, string]
     seatPolicyKind*: array[CabinetCount, string]
-    llmTurns*: array[CabinetCount, int]
+    externalTurns*: array[CabinetCount, int]
     fallbackTurns*: array[CabinetCount, int]
     endReason*: string
     endRule*: string
@@ -176,10 +176,15 @@ proc applyStanceRecord*(sim: var SimServer, record: string) =
     node = parseJson(record)
   except CatchableError:
     return
-  if node.kind != JObject or node{"k"}.getStr() != "stance":
+  if node.kind != JObject:
     return
   let seat = node{"seat"}.getInt(-1)
   if seat < 0 or seat >= CabinetCount:
+    return
+  if node{"k"}.getStr() == "register":
+    sim.seatPolicyKind[seat] = node["kind"].getStr()
+    return
+  if node{"k"}.getStr() != "stance":
     return
   var view = StanceView(
     turn: node{"turn"}.getInt(0),
@@ -196,6 +201,10 @@ proc applyStanceRecord*(sim: var SimServer, record: string) =
     say: node{"say"}.getStr(""))
   view.sayUntil =
     if view.say.len > 0: sim.tickCount + 60 else: 0
+  if view.source == "external":
+    inc sim.externalTurns[seat]
+  elif view.source == "fallback":
+    inc sim.fallbackTurns[seat]
   sim.stances[seat] = view
   sim.haveStance[seat] = true
   sim.feedStances.add(record)

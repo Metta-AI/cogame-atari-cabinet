@@ -6,6 +6,19 @@ import std/[json, os, osproc, strutils, unicode, unittest]
 import cabinet/[sim, stances, replays, replay_runtime, broadcast, decide]
 import helpers
 
+suite "ordinary policy replay attribution":
+  test "registration and stance counts restore without changing game hashes":
+    var game = initSimServer(episodeConfig(7))
+    let before = game.gameHash()
+    game.applyStanceRecord(registerRecord(0, game.cabinetOfSeat(0), "prompt-player", "prompt", "bulwark"))
+    var stance = defaultStance()
+    stance.source = ssExternal
+    game.applyStanceRecord(boundedStanceRecord(stance, 0, 0, game.cabinetOfSeat(0)))
+    check game.seatPolicyKind[0] == "prompt"
+    check game.externalTurns[0] == 1
+    check game.fallbackTurns[0] == 0
+    check game.gameHash() == before
+
 suite "replay":
   test "a full four-seat episode in each ROM writes a replay that re-simulates exactly":
     for romName in ["warlords", "quadrapong", "foozpong"]:
@@ -112,7 +125,7 @@ suite "replay":
         writer.lastMasks.add(NeutralCommand)
         writer.writeJoin(tickTime(0), seat, "P" & $(seat + 1), seat, "")
         writer.writeChat(tickTime(0), seat, registerRecord(
-          seat, game.cabinetOfSeat(seat), "castellan-\u{1F3AF}", "llm",
+          seat, game.cabinetOfSeat(seat), "castellan-\u{1F3AF}", "external",
           "bulwark"))
       var commands = newSeq[uint8](CabinetCount)
       for seat in 0 ..< CabinetCount:
@@ -123,7 +136,7 @@ suite "replay":
             var stance = defaultStance()
             stance.stance = stAim
             stance.aimAt = (game.cabinetOfSeat(seat) + 1) mod CabinetCount
-            stance.source = ssLlm
+            stance.source = ssExternal
             stance.note = "aiming \u{1F3AF} at the wounded cabinet"
             stance.say = "\u{1F3AF} next"
             let record = boundedStanceRecord(
@@ -150,7 +163,7 @@ suite "replay":
     check document["results"]["rom"].getStr == "warlords"
     var sawEmoji = false
     for stance in document["stances"]:
-      check stance["source"].getStr == "llm"
+      check stance["source"].getStr == "external"
       if "\u{1F3AF}" in stance["say"].getStr:
         sawEmoji = true
     check sawEmoji

@@ -1,49 +1,22 @@
-## The decision layer: the per-turn loop that asks every ALIVE cabinet's
-## policy what its stance is for the next five seconds, and always has an
-## answer.
-##
-## Cadence: one turn every `turnTicks` (120 ticks = 5.0 s of sim time), 24
-## turns per episode. At each turn the server builds every alive seat's request
-## body and issues them as ONE PARALLEL BATCH — the cabinet is a
-## simultaneous-decision game, so querying seats one after another would
-## multiply the wall clock for no gain. At most 4 calls per turn x 24 turns =
-## 96 calls per episode, at most 4 in flight.
-##
-## DEGRADE, NEVER HANG. Every wait here is bounded: attempt 1 gets
-## `attempt1Ms`, the single retry gets `retryMs`, the inter-batch wall floor is
-## a bounded sleep, and the whole turn is wrapped in a monotonic
-## `turnBudgetMs` deadline. A provider throttle with no other candidate model
-## skips the retry outright (it cannot land). On a second failure the seat
-## plays the `bulwark` stance for that turn and a `fallback` record names the
-## cause. NO FAILURE MODE LEAVES A PADDLE UNCOMMANDED: the autopilot always
-## has a stance — this turn's, else last turn's, else `bulwark`'s.
-
-import std/[json, monotimes, os, strutils, times]
-import curly
-import sim, stances, baselines, llm, control
+## General seat observations, order validation, and bounded game fallback.
+import std/json
+import sim, stances, baselines, control
 
 type
   SeatPolicy* = object
-    ## What one seat registered as. A seat that registers with neither field —
-    ## or never registers at all — is `bulwark`.
-    isLlm*: bool
-    prompt*: string
+    ## Public policy attribution only; strategy lives in the player.
+    kind*: string
     baseline*: Baseline
     label*: string
     registered*: bool
 
   DecisionEngine* = object
-    client*: LlmClient
     seats*: seq[SeatPolicy]
     stances*: seq[CabinetStance]
     haveStance*: seq[bool]
-    lastBatchStart*: MonoTime
-    batchStarted*: bool
-    llmOff*: bool              ## the budget guard fired; scripted from here on
     params*: BaselineParams
 
 proc initDecisionEngine*(sim: SimServer): DecisionEngine =
-  result.client = newLlmClient(sim.config)
   result.seats = newSeq[SeatPolicy](CabinetCount)
   result.stances = newSeq[CabinetStance](CabinetCount)
   result.haveStance = newSeq[bool](CabinetCount)
@@ -54,10 +27,7 @@ proc initDecisionEngine*(sim: SimServer): DecisionEngine =
     result.stances[i] = defaultStance()
 
 proc policyKind*(engine: DecisionEngine, seat: int): string =
-  if seat >= 0 and seat < engine.seats.len and engine.seats[seat].isLlm:
-    "llm"
-  else:
-    "scripted"
+  if engine.seats[seat].registered: engine.seats[seat].kind else: "fallback"
 
 # ---------------------------------------------------------------------------
 #  The per-seat board view
@@ -150,7 +120,8 @@ proc seatViewJson*(
          else: newJNull()),
       "arrive_at": newJNull(),
       "arrive_in_ticks": newJNull(),
-      "arrive_along": newJNull()
+      "arrive_along": newJNull(),
+      "arrive_in_ticks_for_you": newJNull()
     }
     if ball.state == bsLive:
       if predictions[index].firstSide >= 0:
@@ -158,6 +129,7 @@ proc seatViewJson*(
         item["arrive_in_ticks"] = %predictions[index].firstTick
       let mine = predictions[index].perSide[cabinet]
       if mine.reaches:
+        item["arrive_in_ticks_for_you"] = %mine.tick
         item["arrive_along"] = %round2(float(mine.along) / float(UuPerCu))
     balls.add(item)
 
@@ -260,9 +232,6 @@ proc fallbackRecord*(
     "detail": detail.truncateRunes(MaxFallbackDetailRunes)
   })
 
-proc budgetGuardRecord*(turn, remainingSeconds: int): string =
-  $(%*{"k": "budget_guard", "turn": turn, "remaining_s": remainingSeconds})
-
 proc resultRecord*(sim: SimServer): string =
   ## The `result` control record — the episode's whole results document,
   ## written once into the replay chat stream at episode end. It is what makes
@@ -276,12 +245,6 @@ proc resultRecord*(sim: SimServer): string =
 # ---------------------------------------------------------------------------
 #  The turn
 # ---------------------------------------------------------------------------
-
-proc scriptedFor*(
-  engine: DecisionEngine, sim: SimServer, seat, turn: int
-): CabinetStance =
-  sim.baselineStance(
-    sim.cabinetOfSeat(seat), engine.seats[seat].baseline, turn, engine.params)
 
 proc bulwarkFor*(
   engine: DecisionEngine, sim: SimServer, seat: int
@@ -340,192 +303,35 @@ proc repairStance*(
     repaired.latencyMs = stance.latencyMs
     stance = repaired
 
-proc turnBatch*(
-  engine: DecisionEngine,
-  sim: SimServer,
-  open: seq[int],
-  turnIndex, attempt: int
-): RequestBatch =
-  ## EVERY open seat's request body, in ONE batch. This is the whole shape of
-  ## the decision layer: the cabinet is a simultaneous-decision game, so the
-  ## batch goes out through `curly.makeRequests` in one call and seats are
-  ## NEVER queried one after another. tests/test_engine.nim asserts the batch
-  ## really does carry every alive seat.
-  for seat in open:
-    var user = engine.seatViewJson(sim, seat, turnIndex)
-    if attempt > 0:
-      user.add("\n\nYour previous reply was not usable. Reply with ONLY " &
-        "the JSON object described above, starting with '{'.")
-    let request = engine.client.requestFor(
-      SystemPrompt, userMessage(engine.seats[seat].prompt, user), seat)
-    result.post(request.url, request.headers, request.body, $seat)
-
-proc turn*(
-  engine: var DecisionEngine,
-  sim: SimServer,
-  turnIndex: int,
-  elapsedSeconds: int
-): seq[string] =
-  ## Runs ONE decision turn and installs every seat's stance. Returns the
-  ## replay chat records the turn produced. Never raises: every failure path
-  ## ends in a legal stance.
-  let budget = initDuration(milliseconds = max(1, sim.config.turnBudgetMs))
-  ## `turnStart` is re-taken AFTER the inter-batch rate floor below, because
-  ## the floor is a separate, separately-bounded wait: measuring the budget
-  ## from before it meant a turn that slept 8 s and then timed out attempt 1 at
-  ## 9 s had "spent" 17 s of a 16 s budget and SKIPPED the single retry the
-  ## design promises, while a turn that slept 6 s got it. The budget wraps the
-  ## CALLS (attempt1Ms + retryMs = 14 000 <= turnBudgetMs = 16 000); the guard's
-  ## own per-turn estimate at :360 already adds turnSpacingMs on top.
-  var turnStart = getMonoTime()
-  ## Throttle state is PER TURN: a 429 on turn k says nothing about turn k+1.
-  engine.client.throttled = false
-
-  # --- budget guard: settle EARLY rather than overrun ----------------------
-  # If two more full turns (spacing INCLUDED) would not fit inside the
-  # engine's own wall-clock stop, switch the LLM off for the rest of the
-  # episode and finish on the scripted layer (microseconds per turn), so the
-  # episode ends complete/* rather than deadline.
-  if not engine.llmOff:
-    let turnSeconds =
-      (sim.config.turnBudgetMs + sim.config.turnSpacingMs + 999) div 1000
-    if elapsedSeconds + 2 * turnSeconds > sim.config.wallClockBudgetSeconds:
-      engine.llmOff = true
-      result.add(budgetGuardRecord(
-        turnIndex, max(0, sim.config.wallClockBudgetSeconds - elapsedSeconds)))
-      echo "cabinet: budget guard fired at turn ", turnIndex,
-        "; remaining turns play scripted"
-
-  # --- which seats need a call? -------------------------------------------
-  var open: seq[int]
-  for seat in 0 ..< min(CabinetCount, engine.seats.len):
-    let cabinet = sim.cabinetOfSeat(seat)
-    if cabinet < 0 or sim.cabinets[cabinet].isOut:
-      # An ELIMINATED seat is dropped from every later batch: its paddle is
-      # gone and its byte is ignored.
-      engine.stances[seat] = engine.bulwarkFor(sim, seat)
-      engine.haveStance[seat] = true
-      continue
-    if engine.seats[seat].isLlm and not engine.llmOff and
-        not engine.client.disabled:
-      open.add(seat)
-    elif engine.seats[seat].isLlm:
-      # An LLM seat that CANNOT call the LLM this turn is a FALLBACK, not a
-      # scripted policy, and the design's `fallback.cause` enum names both
-      # reasons it happens. Recording it is what makes the two countable.
-      var stance = engine.bulwarkFor(sim, seat)
-      stance.source = ssFallback
-      engine.stances[seat] = stance
-      engine.haveStance[seat] = true
-      let cause = if engine.llmOff: "budget_guard" else: "no_credentials"
-      result.add(fallbackRecord(turnIndex, seat, 1, cause,
-        "the LLM is unavailable for this turn; playing bulwark"))
-      echo "cabinet llm: seat ", seat, " falling back to bulwark (", cause,
-        ") on turn ", turnIndex
-    else:
-      var stance = engine.scriptedFor(sim, seat, turnIndex)
-      stance.source = ssScripted
-      engine.stances[seat] = stance
-      engine.haveStance[seat] = true
-
-  # --- the rate floor ------------------------------------------------------
-  # The Bedrock sidecar caps 30 requests/minute PER EPISODE and four seats per
-  # batch sits right on it. Hold the START of consecutive batches
-  # `turnSpacingMs` apart, which pins the episode at <= 20 rpm. The cert
-  # fixture sets it to 0, so offline runs pay nothing.
-  if open.len > 0 and engine.batchStarted and sim.config.turnSpacingMs > 0:
-    let since = (getMonoTime() - engine.lastBatchStart).inMilliseconds.int
-    if since < sim.config.turnSpacingMs:
-      sleep(min(sim.config.turnSpacingMs, sim.config.turnSpacingMs - since))
-  if open.len > 0:
-    engine.lastBatchStart = getMonoTime()
-    engine.batchStarted = true
-    turnStart = engine.lastBatchStart
-
-  # --- up to two PARALLEL batches -----------------------------------------
-  var
-    attempt = 0
-    budgetTimedOut = false
-  while open.len > 0 and attempt < 2:
-    if engine.client.disabled:
-      break
-    if getMonoTime() - turnStart >= budget:
-      # No record here: the tail below installs the bulwark stance for every
-      # still-open seat and records exactly ONE fallback per seat per turn.
-      # Recording again here gave the seat TWO fallback records for one turn,
-      # which phase 60 counts.
-      budgetTimedOut = true
-      break
-    let deadlineMs =
-      if attempt == 0: sim.config.attempt1Ms else: sim.config.retryMs
-    var batch = engine.turnBatch(sim, open, turnIndex, attempt)
-    let started = getMonoTime()
-    # curly hands the deadline to CURLOPT_TIMEOUT, whose granularity is WHOLE
-    # SECONDS and whose conversion FLOORS — which is why sim_config rejects a
-    # sub-second value, making this floor an identity (9000 -> 9 s).
-    let responses = engine.client.curl.makeRequests(
-      batch, max(1, deadlineMs div 1000))
-    let latency = (getMonoTime() - started).inMilliseconds.int
-    var stillOpen: seq[int]
-    for position, seat in open:
-      var cause = "parse_error"
-      try:
-        let text = engine.client.textOf(
-          responses[position].response, responses[position].error,
-          batch[position].url)
-        var cabinetOut: array[CabinetCount, bool]
-        for k in 0 ..< CabinetCount:
-          cabinetOut[k] = sim.cabinets[k].isOut
-        var live: seq[bool]
-        for ball in sim.balls:
-          live.add(ball.state == bsLive)
-        var stance = parseCabinetStance(
-          extractJsonObject(text), sim.cabinetOfSeat(seat), cabinetOut, live,
-          sim.config.catchEnabled, engine.stances[seat],
-          engine.haveStance[seat])
-        stance.source = ssLlm
-        stance.latencyMs = latency
-        engine.repairStance(sim, seat, stance)
-        engine.stances[seat] = stance
-        engine.haveStance[seat] = true
-      except CatchableError as error:
-        if responses[position].error.len > 0:
-          cause = (if "timeout" in responses[position].error.toLowerAscii():
-                     "timeout" else: "transport_error")
-        elif error.msg.startsWith("llm throttled"):
-          ## Name the throttle for what it is: reporting a 429 as
-          ## `parse_error` is what made a hosted log unreadable.
-          cause = "throttled"
-        result.add(fallbackRecord(
-          turnIndex, seat, attempt + 1, cause, error.msg))
-        echo "cabinet llm: seat ", seat, " attempt ", attempt + 1,
-          " failed, falling back if it fails again: ", error.msg
-        stillOpen.add(seat)
-    open = stillOpen
-    inc attempt
-    if engine.client.throttled and open.len > 0:
-      # FAIL FAST. The only model left answered 429, so the retry batch would
-      # be refused the same way: spend the rest of the turn on the scripted
-      # layer instead of on a call that cannot land.
-      echo "cabinet llm: provider throttled with no other candidate; ",
-        open.len, " seat(s) fall back for turn ", turnIndex
-      break
-
-  # --- anything still open plays bulwark for this turn --------------------
-  for seat in open:
-    var stance = engine.bulwarkFor(sim, seat)
-    stance.source = ssFallback
+proc acceptOrders*(
+  engine: var DecisionEngine, sim: SimServer, seat, turnIndex: int,
+  text: string
+): bool =
+  ## Reject stale/malformed orders; the common deadline supplies fallback.
+  try:
+    let node = parseJson(text)
+    if node.kind != JObject or node{"type"}.getStr() != "orders" or
+        node{"turn"}.getInt(-1) != turnIndex:
+      return false
+    var cabinetOut: array[CabinetCount, bool]
+    for cabinet in 0 ..< CabinetCount:
+      cabinetOut[cabinet] = sim.cabinets[cabinet].isOut
+    var live: seq[bool]
+    for ball in sim.balls:
+      live.add(ball.state == bsLive)
+    var stance = parseCabinetStance(
+      node["action"], sim.cabinetOfSeat(seat), cabinetOut, live,
+      sim.config.catchEnabled, engine.stances[seat], engine.haveStance[seat])
+    stance.source = ssExternal
+    engine.repairStance(sim, seat, stance)
     engine.stances[seat] = stance
     engine.haveStance[seat] = true
-    let cause =
-      if engine.client.disabled or engine.client.transport == ltNone:
-        "no_credentials"
-      elif engine.llmOff: "budget_guard"
-      elif budgetTimedOut: "timeout"
-      elif engine.client.throttled: "throttled"
-      else: "parse_error"
-    result.add(fallbackRecord(turnIndex, seat, 2, cause,
-      "seat fell back to the bulwark stance"))
-    ## "falling back" is the phrase phase 60 greps the GAME log for.
-    echo "cabinet llm: seat ", seat, " falling back to bulwark (", cause,
-      ") on turn ", turnIndex
+    result = true
+  except CatchableError:
+    result = false
+
+proc fallback*(engine: var DecisionEngine, sim: SimServer, seat: int) =
+  var stance = engine.bulwarkFor(sim, seat)
+  stance.source = ssFallback
+  engine.stances[seat] = stance
+  engine.haveStance[seat] = true

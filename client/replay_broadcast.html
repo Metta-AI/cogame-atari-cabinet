@@ -3382,8 +3382,8 @@ body[data-embed] #board { top: 0; height: 100%; }
         // in the title, and the columns are the score's own terms.
         var cabTr = (s.teams || {})[p.team] || {};
         var title = esc(p.name || '') + ' — ' + esc(p.alias || '') + ' · ' +
-          (p.kind === 'llm' ? 'LLM' : 'scripted') + ' · ' +
-          (p.llmTurns || 0) + ' llm / ' + (p.fallbackTurns || 0) + ' fallback turns';
+          p.kind + ' · ' +
+          p.externalTurns + ' external / ' + (p.fallbackTurns || 0) + ' fallback turns';
         return '<div class="ec-row' + (mvp ? ' mvp' : '') + '" title="' + title + '">' +
           '<span class="pcell">' +
           '<span class="pname">' + esc(shortName(rosterName(s, p.s))) + '</span>' +

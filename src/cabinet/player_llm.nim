@@ -1,24 +1,5 @@
-## Claude-backed cabinet stances. A policy is just a prompt: the game server
-## composes the seat's board view plus that seat's PLAYER_PROMPT and asks
-## Claude what its cabinet does for the next 5 seconds.
-##
-## Inherited from the starter (`src/ctf/llm.nim`) behaviour for behaviour — the
-## credential ladder, the single-haiku model list, the `throttled` fast-fail,
-## the fence-tolerant JSON extraction and the rune-boundary truncation are all
-## scar tissue from real hosted failures.
-##
-## THE CABINET IS A SIMULTANEOUS-DECISION GAME, so every alive seat's call goes
-## out as ONE PARALLEL BATCH per turn (`curly.makeRequests`). Seats are never
-## queried sequentially: that is what keeps 24 turns inside the wall-clock
-## budget.
-##
-## Credentials, in order of preference:
-##   COWORLD_LLM_ENDPOINT (hosted), or local Bedrock bearer token
-##   ANTHROPIC_API_KEY
-##   ANTHROPIC_API_KEY_URI
-## With none of them the client disables itself and every turn falls back to
-## the scripted layer INSTANTLY, with no network wait — which is what lets
-## offline certification finish in seconds.
+## Player-owned Claude transport. The game never imports this module.
+## Credentials and operator prompts are local to the ordinary player process.
 
 import std/[json, os, strutils]
 import bitworld/runtime
@@ -94,11 +75,9 @@ proc bedrockUrl(client: LlmClient): string =
   client.bedrockEndpoint & "/model/" &
     client.bedrockModels[client.bedrockModel] & "/invoke"
 
-proc newLlmClient*(config: GameConfig): LlmClient =
+proc newLlmClient*(model = "claude-haiku-4-5-20251001", maxOutputTokens = 900): LlmClient =
   result = LlmClient(
-    model: (if config.model.len > 0: config.model
-            else: "claude-haiku-4-5-20251001"),
-    maxOutputTokens: max(1, config.maxOutputTokens))
+    model: model, maxOutputTokens: max(1, maxOutputTokens))
   let sidecarEndpoint = getEnv("COWORLD_LLM_ENDPOINT").strip()
   if sidecarEndpoint.len > 0:
     result.transport = ltSidecar

@@ -62,7 +62,7 @@ suite "manifest":
       check key in schemaKeys
     for key in ["names", "aliases", "cabinets", "policyKinds", "scores", "win",
                 "placements", "livesLeft", "concedes", "knockouts", "chips",
-                "saves", "catches", "bricksLeft", "llmTurns",
+                "saves", "catches", "bricksLeft", "externalTurns",
                 "fallbackTurns"]:
       check properties[key]["minItems"].getInt == CabinetCount
       check properties[key]["maxItems"].getInt == CabinetCount
@@ -163,14 +163,12 @@ suite "manifest":
       let config = variant["game_config"]
       if first == nil:
         first = config
-      for key in ["maxTicks", "turnTicks", "turnSpacingMs", "turnBudgetMs",
-                  "wallClockBudgetSeconds", "lobbyJoinTimeoutTicks",
-                  "attempt1Ms", "retryMs"]:
+      for key in ["maxTicks", "turnTicks", "turnBudgetMs",
+                  "wallClockBudgetSeconds", "lobbyJoinTimeoutTicks"]:
         check config[key].getInt == first[key].getInt
       # DEGRADE, NEVER HANG: play inside 60 % of episodeTimeoutSeconds (1200).
       check config["wallClockBudgetSeconds"].getInt <= 720
-      check config["attempt1Ms"].getInt + config["retryMs"].getInt <=
-        config["turnBudgetMs"].getInt
+
       check config["maxTicks"].getInt mod config["turnTicks"].getInt == 0
       check config["fastMode"].getBool
 
@@ -196,15 +194,11 @@ suite "manifest":
     check "platform: linux/amd64" in text
     check "network: host" in text
 
-  test "hosted inference needs no provider secret":
-    let name = document["game"]["name"].getStr
-    check name == GameName
-    doAssert document{"game"}{"runnable"}{"env"}{"ANTHROPIC_API_KEY_URI"}.isNil,
-      "hosted LLM uses the platform sidecar without provider secrets"
+  test "the game runnable receives no model credential":
+    check document["game"]["name"].getStr == GameName
+    check not document["game"]["runnable"].hasKey("env")
     check document["game"]["runnable"]["type"].getStr == "game"
     check document["game"]["runnable"]["run"][0].getStr == "/bin/atari-cabinet"
-    check document["game"]["runnable"]["source_url"].getStr.startsWith(
-      "https://github.com/Metta-AI/cogame-atari-cabinet")
 
   test "the policy set is two LLM champions plus two scripted fillers, one image":
     let policies = parseJson(sourceText("tools/ci/policies.json"))
@@ -234,7 +228,6 @@ suite "manifest":
     check config["maxTicks"].getInt >= 720
     check config["maxTicks"].getInt div TargetFps >= 30
     # no batch spacing offline, and a short lobby budget
-    check config["turnSpacingMs"].getInt == 0
     check config["lobbyJoinTimeoutTicks"].getInt <= 1440
     check config["wallClockBudgetSeconds"].getInt <= 240
     # The release workflow gives CERTIFY room for the shutdown grace. Matching

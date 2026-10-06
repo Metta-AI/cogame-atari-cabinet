@@ -211,17 +211,14 @@ suite "server":
     check chat == "hello"
     # …but only a `register` object is a registration
     check not parseRegistration("hello").ok
-    check parseRegistration("""{"type":"register","prompt":"x"}""").ok
+    check parseRegistration("""{"type":"register","kind":"prompt"}""").ok
 
-  test "a prompt over 4000 runes is TRUNCATED at the transport, never rejected":
-    let long = "x".repeat(9000)
+  test "registration carries policy metadata, not a strategy prompt":
     let registration = parseRegistration(
-      $(%*{"type": "register", "prompt": long, "policy": "big"}))
+      $(%*{"type": "register", "kind": "prompt", "policy": "castellan"}))
     check registration.ok
-    check registration.prompt.len == 9000
-    # the server truncates on the way into the seat policy
-    check registration.prompt.truncateRunes(MaxPromptRunes).len ==
-      MaxPromptRunes
+    check registration.kind == "prompt"
+    check registration.policy == "castellan"
 
   test "the viewer's own input channel reads transport commands and seeks":
     var viewer = initGlobalViewerState()
@@ -239,7 +236,7 @@ suite "server":
     check viewer.povSelectPending == 2
 
   test "the register record is REDACTED: the prompt never reaches the replay":
-    let record = registerRecord(1, 2, "castellan", "llm", "bulwark")
+    let record = registerRecord(1, 2, "castellan", "external", "bulwark")
     check "prompt" notin record
     let parsed = parseJson(record)
     check parsed["k"].getStr == "register"
@@ -247,9 +244,9 @@ suite "server":
     check parsed["cabinet"].getInt == 2
     check parsed["alias"].getStr == "GREEN"
     check parsed["policy"].getStr == "castellan"
-    check parsed["kind"].getStr == "llm"
+    check parsed["kind"].getStr == "external"
     # the label is capped
-    let long = registerRecord(0, 0, "y".repeat(400), "llm", "bulwark")
+    let long = registerRecord(0, 0, "y".repeat(400), "external", "bulwark")
     check parseJson(long)["policy"].getStr.len == MaxPolicyLabelRunes
 
 # The mummy server ran on its own thread inside this process. Nim's exit path

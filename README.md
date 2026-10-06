@@ -24,14 +24,16 @@ rally is a choice about whom to shoot at.
 * The design note this repo implements:
   [docs/plans/2026-08-26-atari-cabinet-design.md](docs/plans/2026-08-26-atari-cabinet-design.md)
 
-## A policy is just a prompt
+## Ordinary player policies
 
-Every 5 s of sim time the **game server** — not the player container — asks
-Claude for one JSON object per living cabinet, all of them in **one parallel
-batch** (this is a simultaneous-decision game). A deterministic autopilot turns
-the standing stance into one **command byte** per cabinet per tick at 24 Hz;
-that byte is the action, the byte is what the replay records, and the byte is
-what the browser replays.
+Every five seconds of simulation time, the game sends each living cabinet a
+private observation. The player returns a complete stance over
+`atari-cabinet.player.v2`. Scripted, prompt, and trained policies use this same
+interface. Prompts and inference credentials stay in the player process.
+
+The game validates orders and uses a native bulwark fallback on invalid,
+missing, or disconnected players. A deterministic autopilot compiles accepted
+stances into recorded command bytes at 24 Hz. The replay needs no model calls.
 
 ```bash
 coworld upload-policy coworld-atari-cabinet:latest \
@@ -42,7 +44,7 @@ lives. Never post wider than +/-12."
 ```
 
 The same image also ships two scripted baselines, selected by env var, so an
-LLM policy and a scripted one are byte-identical apart from their environment:
+prompt policy and a scripted policy use the same observation and order protocol:
 
 | env | seat |
 |---|---|
@@ -72,9 +74,9 @@ python3 tools/replay_summary.py episode.replay | jq .
 
 ```
 src/atari_cabinet.nim         the game server entrypoint (seed randomised BEFORE config.update)
-src/atari_cabinet_player.nim  the thin seat registrar -> /bin/atari-cabinet-player
+src/atari_cabinet_player.nim  the ordinary policy player -> /bin/atari-cabinet-player
 src/cabinet/                  sim_types, trig, arena, rom, sim_config, sim_state, sim,
-                              roster, stances, control, baselines, llm, decide, events,
+                              roster, stances, control, baselines, decide, events,
                               labels, global, broadcast, wire_constants, replays,
                               replay_runtime, server
 replay-viewer/                the wasm entry + the emscripten link flags + the shell JS
@@ -108,3 +110,15 @@ cross-multiplication in `int64`. There is no square root, no trigonometry and
 **wasm32** build of the same module the **amd64** server ran and their per-tick
 hash chains must match bit-for-bit. The autopilot and the renderer sit outside
 that boundary and may use floats: only the recorded bytes cross it.
+
+Prompt players need `ANTHROPIC_API_KEY` or their hosted inference sidecar in
+the player environment. Optional settings are `PLAYER_MODEL` and
+`PLAYER_MAX_OUTPUT_TOKENS`. The game receives no inference credentials.
+
+### Ordinary-player smoke
+
+`tools/ci/ordinary_player_smoke.py` runs four native player processes against
+one game, with a local model stub or explicitly absent credentials. The
+`disconnect` mode terminates one owned player and makes the remaining model
+transport fail. It checks game completion, accepted orders, fallback, results,
+and replay. CI runs all three modes. Stub choices prove routing, not strength.
