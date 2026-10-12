@@ -291,15 +291,7 @@ def build() -> dict:
                 "type": "game",
                 "image": image,
                 "run": ["/bin/atari-cabinet"],
-                "env": {
-                    # Without this the hosted container never receives the
-                    # secret and every league episode plays scripted while
-                    # local certify still passes (hive, 2026-08-23). The
-                    # namespace must equal game.name exactly
-                    # (cooperative-hunting, 2026-08-25).
-                    "ANTHROPIC_API_KEY_URI":
-                        "secret://coworld/%s/anthropic_api_key" % GAME_NAME
-                },
+                "env": {},
                 "source_url": source_url,
             },
             # Nested under `game`, not top-level; no top-level version and no
