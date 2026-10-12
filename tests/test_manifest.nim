@@ -194,13 +194,13 @@ suite "manifest":
     for player in document["player"]:
       check player["image"].getStr == placeholder
     check "platform: linux/amd64" in text
-    check "network: host" in text
+    check "network: host" notin text
 
-  test "the secret namespace equals game.name exactly":
+  test "hosted inference needs no provider secret":
     let name = document["game"]["name"].getStr
     check name == GameName
-    check document["game"]["runnable"]["env"]["ANTHROPIC_API_KEY_URI"].getStr ==
-      "secret://coworld/" & name & "/anthropic_api_key"
+    doAssert document{"game"}{"runnable"}{"env"}{"ANTHROPIC_API_KEY_URI"}.isNil,
+      "hosted LLM uses the platform sidecar without provider secrets"
     check document["game"]["runnable"]["type"].getStr == "game"
     check document["game"]["runnable"]["run"][0].getStr == "/bin/atari-cabinet"
     check document["game"]["runnable"]["source_url"].getStr.startsWith(
