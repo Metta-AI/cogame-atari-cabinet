@@ -8,7 +8,7 @@
 
 import std/[json, os, sysrand]
 import bitworld/runtime
-import cabinet/[sim, server]
+import cabinet/[sim, server, prompts]
 
 const LegacyFixedSeed = 0xA6019
   ## The old compiled-in default seed. A config carrying it — or no seed at
@@ -85,4 +85,5 @@ when isMainModule:
     config,
     localReplayPath,
     loadReplayPath,
-    runtimeConfig)
+    runtimeConfig,
+    promptSelection(if runtimeConfig.config.len > 0: parseJson(runtimeConfig.config) else: newJObject()))

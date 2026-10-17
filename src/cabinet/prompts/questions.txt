@@ -1,0 +1,10 @@
+Which role do you play?
+One of four arcade cabinets around a square CRT arena, 100 x 100 units.
+How does the game work and score?
+$1
+What can you see or communicate?
+You see every ball, paddle, brick, and cabinet's lives on the whole screen. You do not see who operates the other cabinets or their plans. You cannot talk to them, and no other cabinet sees your writing.
+When do you decide?
+$2
+How must you respond?
+$3

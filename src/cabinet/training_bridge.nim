@@ -2,9 +2,9 @@
 ## Reuses the hosted view, stance parser, autopilot, and simulator.
 
 import std/[hashes, json, os]
-import sim, decide, stances, baselines, control, numeric_codec
+import sim, decide, stances, baselines, control, numeric_codec, prompts
 
-const SystemPrompt = "Play one Atari Cabinet seat. Reply with a JSON stance: " &
+const NumericSystemPrompt = "Play one Atari Cabinet seat. Reply with a JSON stance: " &
   "{\"stance\":\"guard|aim|camp|catch|chase\"," &
   "\"target_ball\":\"B1|B2|any\"," &
   "\"aim_at\":\"RED|BLUE|GREEN|YELLOW|none\"," &
@@ -17,6 +17,8 @@ var
   decisionId: int
   actingSeat: int
   rom = "warlords"
+  languageMode = false
+  selection: PromptSelection
 
 proc activeSeats(): seq[int] =
   for seat in 0 ..< CabinetCount:
@@ -35,13 +37,13 @@ proc stanceJson(stance: CabinetStance): JsonNode =
 
 proc currentDecision(): JsonNode =
   let turn = game.gameTicksElapsed() div game.config.turnTicks
-  %*{
+  result = %*{
     "kind": "decision", "game": "atari-cabinet", "decision_id": decisionId,
     "seat": actingSeat, "engine_seat": game.cabinetOfSeat(actingSeat), "turn": turn,
     "semantic_view": parseJson(engine.seatViewJson(game, actingSeat, turn)),
     "inbox": [], "speech_messages": [], "typed_question": newJNull(),
     "messages": [
-      {"role": "system", "content": SystemPrompt},
+      {"role": "system", "content": (if languageMode: selection.systemPrompt() else: NumericSystemPrompt)},
       {"role": "user", "content": engine.seatViewJson(game, actingSeat, turn)},
     ],
     "action_schema": {
@@ -57,9 +59,21 @@ proc currentDecision(): JsonNode =
     },
   }
 
+  if languageMode:
+    result["inference_mode"] = %"text_action"
+    result["semantic_view"]["prompt_template"] = selection.promptMetadata(
+      result["messages"][0]["content"].getStr(), result["messages"][1]["content"].getStr())
+    result["action_schema"]["properties"]["note"] = %*{"type": "string", "maxLength": 160}
+    result["action_schema"]["properties"]["say"] = %*{"type": "string", "maxLength": 48}
+
 proc reset(command: JsonNode): JsonNode =
   if command["players"].getInt() != CabinetCount:
     raise newException(ValueError, "Atari Cabinet has exactly four seats")
+  selection = promptSelection(command)
+  if selection.selectedVariant in {pvHeldoutBriefing, pvHeldoutReference}:
+    raise newException(ValueError, "held-out prompt variants are evaluation-only")
+  if not languageMode and selection.variant != pvCanonical:
+    raise newException(ValueError, "prompt variants require --language")
   var config = defaultGameConfig()
   config.update($(%*{
     "rom": rom,
@@ -86,6 +100,8 @@ proc teacher(): JsonNode =
   let cabinet = game.cabinetOfSeat(actingSeat)
   let turn = game.gameTicksElapsed() div game.config.turnTicks
   let stance = game.baselineStance(cabinet, blBulwark, turn)
+  if languageMode:
+    return %*{"response": $stanceJson(stance)}
   let action = decodeActions(parseJson(engine.seatViewJson(game, actingSeat, turn)), encodeStance(stance))
   action.delete("note")
   action.delete("say")
@@ -141,10 +157,13 @@ proc step(command: JsonNode): JsonNode =
     "observation": currentDecision()}
 
 when isMainModule:
-  if paramCount() > 1:
-    raise newException(ValueError, "Pass at most one ROM")
-  if paramCount() == 1:
+  if paramCount() > 2:
+    raise newException(ValueError, "Pass a ROM and optional --language")
+  if paramCount() >= 1:
     rom = paramStr(1)
+  if paramCount() == 2:
+    doAssert paramStr(2) == "--language"
+    languageMode = true
   if rom notin ["warlords", "quadrapong", "foozpong"]:
     raise newException(ValueError, "ROM must be warlords, quadrapong, or foozpong")
   for line in stdin.lines:
@@ -153,9 +172,11 @@ when isMainModule:
       of "reset": reset(command)
       of "teacher": teacher()
       of "encode":
+        doAssert not languageMode
         numericEncoding(parseJson(engine.seatViewJson(game, actingSeat,
           game.gameTicksElapsed() div game.config.turnTicks)), decisionId)
       of "decode":
+        doAssert not languageMode
         %*{"response": $decodeActions(parseJson(engine.seatViewJson(game,
           actingSeat, game.gameTicksElapsed() div game.config.turnTicks)), command["actions"])}
       of "step": step(command)

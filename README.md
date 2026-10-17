@@ -122,3 +122,25 @@ one game, with a local model stub or explicitly absent credentials. The
 `disconnect` mode terminates one owned player and makes the remaining model
 transport fail. It checks game completion, accepted orders, fallback, results,
 and replay. CI runs all three modes. Stub choices prove routing, not strength.
+
+## Episode-stable rules wording
+
+`promptVariant` selects `canonical` (default), `plain`, `numbered`, `questions`,
+`reordered`, `heldout-briefing`, `heldout-reference`, or `mixed`. Mixed selection
+requires an explicit nonnegative integer `promptSeed`; seed modulo five selects
+one training wording for the whole episode. The prompt seed never draws from
+the game RNG or changes the seeded seat-to-cabinet permutation.
+
+The game sends its selected rules in each private player decision. The ordinary
+player combines those rules with its own operator guidance and seat view. Canonical
+rules remain exact; all variants share mechanics, scoring, cadence, and legal
+response fields verbatim. Opponent identities, plans, and private writing remain
+hidden. The physical board is shared and fully visible.
+
+Set `COGAME_SAVE_TRAJECTORY_URI` for a separate private JSONL artifact containing
+server contexts and explicitly player-reported contexts. `COWORLD_SOURCE_REVISION`
+records the source pin. The artifact can contain private operator guidance: do not
+publish it as a replay. Hashes establish recorded prompt intent, not authenticated
+model generation. Public replays and results contain no prompt selection metadata.
+See [training and matched evaluation](docs/TRAINING.md) for text collection and
+held-out evaluation. These controls do not establish reduced model collapse.

@@ -1,0 +1,8 @@
+You operate one of four arcade cabinets around a 100 x 100 unit square CRT arena.
+Decision cadence:
+$2
+Response contract:
+$3
+Board and scoring rules:
+$1
+Information: every ball, paddle, brick, and cabinet's lives are visible. Opponents' identities and plans remain private. Cabinets cannot communicate or read one another's writing.

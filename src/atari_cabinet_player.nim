@@ -4,7 +4,7 @@ import std/[httpclient, json, options, os, strutils, uri]
 import bitworld/spriteprotocol
 import whisky
 import curly
-import cabinet/[sim_types, stances, baselines, player_baselines, player_llm, numeric_codec]
+import cabinet/[sim_types, stances, baselines, player_baselines, player_llm, numeric_codec, prompts]
 
 const
   ConnectAttempts = 240      ## 240 x 500 ms = 2 minutes of dialling.
@@ -87,14 +87,22 @@ when isMainModule:
     var live: seq[bool]
     for ball in view["balls"]:
       live.add(ball["state"].getStr() == "live")
+    let selection = promptSelection(%*{
+      "promptVariant": decision["prompt_template"]["selection"],
+      "promptSeed": decision["prompt_template"]["seed"]})
+    let system = decision["system"].getStr()
+    let user = userMessage(prompt, $view)
+    var evidenceKind = "scripted_context"
     if prompt.len > 0:
+      evidenceKind = "configured_context"
       if client.disabled:
         stance.source = ssFallback
       else:
         client.throttled = false
         # The player performs inference. All seats run concurrently in their
         # own containers; the game owns their shared response deadline.
-        let request = client.requestFor(SystemPrompt, userMessage(prompt, $view), seat)
+        evidenceKind = "requested_context"
+        let request = client.requestFor(system, user, seat)
         var batch: RequestBatch
         batch.post(request.url, request.headers, request.body, "player")
         let responses = client.curl.makeRequests(batch,
@@ -109,7 +117,11 @@ when isMainModule:
     var action = stance.stanceRecordNode(decision["turn"].getInt(), 0, cabinet)
     for field in ["k", "turn", "seat", "alias", "cabinet", "source", "latency_ms", "post_milli", "aggression_255"]:
       action.delete(field)
-    $(%*{"type": "orders", "turn": decision["turn"], "action": action})
+    var evidence = selection.promptRecord(system, user, evidenceKind,
+      decision["turn"].getInt(), seat)
+    evidence["fallback"] = %(stance.source == ssFallback)
+    $(%*{"type": "orders", "turn": decision["turn"], "action": action,
+      "prompt_evidence": evidence})
 
   echo "cabinet player: kind=",
     (if prompt.len > 0: "llm" else: "scripted"),

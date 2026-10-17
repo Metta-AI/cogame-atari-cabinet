@@ -1,0 +1,5 @@
+You control one of four arcade cabinets surrounding a square CRT arena measuring 100 x 100 units.
+$1
+Your view covers the entire physical board: all balls, paddles, bricks, and lives. The other cabinets' players and plans are private. You cannot communicate with them; they cannot see your writing.
+$2
+$3

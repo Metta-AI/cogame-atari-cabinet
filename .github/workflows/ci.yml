@@ -115,6 +115,15 @@ jobs:
       - name: Exercise training bridge across all ROMs
         run: python3 tests/test_training_bridge.py
 
+      - name: Complete matched prompt games and private provenance checks
+        run: |
+          python3 -m pip install websockets==15.0.1
+          nim c -d:release --parallelBuild:1 --path:src -o:/tmp/cabinet-bridge src/cabinet/training_bridge.nim
+          python3 tools/test_prompt_variants.py /tmp/cabinet-bridge
+          python3 tools/test_prompt_socket_games.py "$PWD/dist/ordinary/game" /tmp/cabinet-sockets "$GITHUB_SHA"
+          PROMPT_EVIDENCE_MALFORMED=1 python3 tools/test_prompt_socket_games.py "$PWD/dist/ordinary/game" /tmp/cabinet-malformed "$GITHUB_SHA"
+          python3 tools/test_prompt_socket_games.py "$PWD/dist/ordinary/game" /tmp/cabinet-native "$GITHUB_SHA" "$PWD/dist/ordinary/player"
+
       - name: Run tests
         # Every tests/*.nim runs twice: debug (range/overflow checks, stack
         # traces) and -d:release (release-only compile errors and codegen bugs

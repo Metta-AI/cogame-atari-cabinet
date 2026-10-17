@@ -111,6 +111,16 @@ def config_schema() -> dict:
             },
             "closedRoster": {"type": "boolean", "default": False},
             "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+            "promptVariant": {
+                "type": "string", "default": "canonical",
+                "enum": ["canonical", "plain", "numbered", "questions", "reordered",
+                         "heldout-briefing", "heldout-reference", "mixed"],
+                "description": "Episode-stable wording; held-out variants are evaluation-only.",
+            },
+            "promptSeed": {
+                "type": "integer", "minimum": 0, "default": 0,
+                "description": "Independent wording seed; explicit for mixed; never draws game RNG.",
+            },
             "num_agents": int_prop(1, SEATS, SEATS,
                                    "seats, and cabinets: always 4"),
             "minPlayers": int_prop(1, SEATS, SEATS),

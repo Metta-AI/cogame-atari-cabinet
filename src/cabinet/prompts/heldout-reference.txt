@@ -1,0 +1,8 @@
+Role reference: one arcade cabinet out of four surrounding a 100 x 100 unit square CRT arena.
+Output specification
+$3
+Physical rules and score
+$1
+Decision timing
+$2
+Visibility reference: the entire physical screen is visible, including all balls, paddles, bricks, and lives. Other players' identities and intentions are not visible. No cabinet can talk to another or read its writing.
