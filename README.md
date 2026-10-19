@@ -133,14 +133,10 @@ the game RNG or changes the seeded seat-to-cabinet permutation.
 
 The game sends its selected rules in each private player decision. The ordinary
 player combines those rules with its own operator guidance and seat view. Canonical
-rules remain exact; all variants share mechanics, scoring, cadence, and legal
-response fields verbatim. Opponent identities, plans, and private writing remain
+rules remain exact. Role, visibility and control-loop explanations vary; numerical
+mechanics, scoring and legal response fields stay verbatim. Opponent identities, plans, and private writing remain
 hidden. The physical board is shared and fully visible.
 
-Set `COGAME_SAVE_TRAJECTORY_URI` for a separate private JSONL artifact containing
-server contexts and explicitly player-reported contexts. `COWORLD_SOURCE_REVISION`
-records the source pin. The artifact can contain private operator guidance: do not
-publish it as a replay. Hashes establish recorded prompt intent, not authenticated
-model generation. Public replays and results contain no prompt selection metadata.
-See [training and matched evaluation](docs/TRAINING.md) for text collection and
-held-out evaluation. These controls do not establish reduced model collapse.
+Text training observations record the bank, wording, independent seed and exact
+message hashes. See [training and matched evaluation](docs/TRAINING.md) for
+collection and held-out evaluation. These controls do not establish reduced model collapse.

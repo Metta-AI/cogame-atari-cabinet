@@ -3,6 +3,7 @@ The screen reveals all physical play: every ball, paddle, brick, and cabinet's l
 The following rules govern the board and score.
 $1
 Your standing orders operate on this schedule.
-$2
+Control briefing
+The policy supplies a stance at 5-second intervals, each covering the next 5 seconds. A deterministic controller works at 24 updates per second. It forecasts where each ball meets the paddle line, brings the bar there and sets the impact offset for the requested return direction. Select what needs defending and which rival to shoot.
 Use this response format.
-$3
+$2

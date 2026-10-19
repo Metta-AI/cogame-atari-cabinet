@@ -70,7 +70,8 @@ proc reset(command: JsonNode): JsonNode =
   if command["players"].getInt() != CabinetCount:
     raise newException(ValueError, "Atari Cabinet has exactly four seats")
   selection = promptSelection(command)
-  if selection.selectedVariant in {pvHeldoutBriefing, pvHeldoutReference}:
+  if selection.selectedVariant in {pvHeldoutBriefing, pvHeldoutReference} and
+      (not command.hasKey("split") or command["split"].getStr() != "validation"):
     raise newException(ValueError, "held-out prompt variants are evaluation-only")
   if not languageMode and selection.variant != pvCanonical:
     raise newException(ValueError, "prompt variants require --language")

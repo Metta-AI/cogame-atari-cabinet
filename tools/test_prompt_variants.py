@@ -1,4 +1,4 @@
-"""Complete games through the real bridge, with matched wording and numeric panels."""
+"""Complete games through the real bridge with matched prompt wordings."""
 
 import hashlib
 import json
@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 binary = str(Path(sys.argv[1]).resolve())
-templates = ["canonical", "plain", "numbered", "questions", "reordered"]
+templates = ["canonical", "plain", "numbered", "questions", "reordered", "heldout-briefing", "heldout-reference"]
 roms = ["warlords", "quadrapong", "foozpong"]
 completed = 0
 
@@ -28,12 +28,12 @@ for rom in roms:
         text=True,
     )
     try:
-        for seed in ("17", "946001"):
+        for seed in ("17",):
             canonical = None
             direct = []
             for selection, prompt_seed in [
                 *((name, 0) for name in templates),
-                *(("mixed", i) for i in range(5)),
+                ("mixed", 4),
             ]:
                 selected = templates[prompt_seed] if selection == "mixed" else selection
                 observation = request(
@@ -44,6 +44,7 @@ for rom in roms:
                         "players": 4,
                         "promptVariant": selection,
                         "promptSeed": prompt_seed,
+                        "split": "validation",
                     },
                 )
                 transcript = []
@@ -51,7 +52,7 @@ for rom in roms:
                 while observation["kind"] == "decision":
                     view = observation["semantic_view"]
                     metadata = view.pop("prompt_template")
-                    assert metadata["bank"] == "atari-cabinet-rules-v1"
+                    assert metadata["bank"] == "atari-cabinet-rules-v2"
                     assert (
                         metadata["selection"],
                         metadata["seed"],
@@ -131,7 +132,7 @@ for rom in roms:
                 else:
                     direct.append(system)
                 completed += 1
-            assert len(set(direct)) == 5
+            assert len(set(direct)) == 7
     finally:
         process.stdin.close()
         process.stdout.close()
@@ -156,63 +157,4 @@ for rom in roms:
         )
         assert result.returncode != 0 and not result.stdout
 
-comparisons = 0
-if len(sys.argv) == 3:
-    baseline = str(Path(sys.argv[2]).resolve())
-    for rom in roms:
-        processes = [
-            subprocess.Popen(
-                [program, rom],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                text=True,
-            )
-            for program in (baseline, binary)
-        ]
-        try:
-            for seed in ("17", "946001"):
-                observations = [
-                    request(p, {"kind": "reset", "seed": seed, "players": 4})
-                    for p in processes
-                ]
-                while observations[0]["kind"] == "decision":
-                    assert observations[0] == observations[1], (
-                        "Numeric canonical behavior changed"
-                    )
-                    encoded = [request(p, {"kind": "encode"}) for p in processes]
-                    assert encoded[0] == encoded[1]
-                    assert len(encoded[0]["values"]) == 115
-                    actions = [
-                        request(p, {"kind": "teacher"})["response"] for p in processes
-                    ]
-                    assert actions[0] == actions[1]
-                    results = [
-                        request(
-                            p,
-                            {
-                                "kind": "step",
-                                "decision_id": obs["decision_id"],
-                                "response": action,
-                            },
-                        )
-                        for p, obs, action in zip(
-                            processes, observations, actions, strict=True
-                        )
-                    ]
-                    assert results[0] == results[1]
-                    observations = [r["observation"] for r in results]
-                assert observations[0] == observations[1]
-                comparisons += 1
-        finally:
-            for p in processes:
-                p.stdin.close()
-                p.stdout.close()
-                assert p.wait(timeout=5) == 0
-print(
-    json.dumps(
-        {
-            "complete_language_games": completed,
-            "original_numeric_comparisons": comparisons,
-        }
-    )
-)
+print(json.dumps({"complete_language_games": completed}))

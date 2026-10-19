@@ -17,7 +17,7 @@ type
     variant*: PromptVariant
     seed*: int
 
-const PromptBankVersion* = "atari-cabinet-rules-v1"
+const PromptBankVersion* = "atari-cabinet-rules-v2"
 
 proc promptSelection*(node: JsonNode): PromptSelection =
   if node.kind != JObject:
@@ -44,9 +44,11 @@ proc promptMetadata*(selection: PromptSelection, system, user: string): JsonNode
     "selection": $selection.variant, "seed": selection.seed,
     "system_sha256": sha256(system).toHex, "user_sha256": sha256(user).toHex}
 
-const CanonicalSystemPrompt* = """
+const Introduction = """
 You are ONE of four arcade cabinets around a square CRT arena, 100 x 100 units.
-Coordinates are units from the bottom-left corner; x runs right, y runs up.
+"""
+
+const Mechanics = """Coordinates are units from the bottom-left corner; x runs right, y runs up.
 Each cabinet owns one side: RED owns the bottom (y=0), BLUE the right (x=100),
 GREEN the top (y=100), YELLOW the left (x=0). Your "+along" end touches the
 next cabinet counter-clockwise: RED -> BLUE -> GREEN -> YELLOW -> RED.
@@ -63,15 +65,21 @@ Thirteen outgoing angles. Every deflection makes the ball FASTER.
 You score for: lives you still have at the end (this is the big one), winning,
 each rival life you take with a ball you touched last, each rival brick your
 ball breaks, and each ball your paddle deflects. Nothing is ever subtracted.
-YOU CAN SEE THE WHOLE SCREEN - every ball, every paddle, every brick, everyone's
+"""
+
+const Visibility = """YOU CAN SEE THE WHOLE SCREEN - every ball, every paddle, every brick, everyone's
 lives. It is a CRT; nothing is hidden. What you CANNOT see is who is playing the
 other cabinets or what they are planning. You CANNOT talk to anyone and nobody
 sees anything you write.
-Every 5 seconds you set your STANCE for the next 5 seconds. A deterministic
+"""
+
+const Cadence = """Every 5 seconds you set your STANCE for the next 5 seconds. A deterministic
 autopilot runs it 24 times a second: it predicts where each ball will reach your
 paddle line, gets the bar there, and picks the contact offset that aims your
 return where you told it to. You choose WHAT to defend and WHOM to shoot.
-Reply with a single JSON object and NOTHING else. Your reply MUST begin with '{'.
+"""
+
+const OutputFormat = """Reply with a single JSON object and NOTHING else. Your reply MUST begin with '{'.
 Schema:
 {"note":"<=160 chars, your reasoning",
  "stance":"guard"|"aim"|"camp"|"catch"|"chase",
@@ -102,6 +110,8 @@ Schema:
  "say":"<=48 chars"}        // spectators only; no cabinet ever sees it
 """
 
+const CanonicalSystemPrompt* = Introduction & Mechanics & Visibility & Cadence & OutputFormat
+
 proc operatorBlock*(prompt: string): string =
   ## The seat's own PLAYER_PROMPT, under a heading that tells the model how
   ## much weight it carries. NEVER echoed into the replay or the results.
@@ -125,20 +135,4 @@ const Templates = [
 proc systemPrompt*(selection: PromptSelection): string =
   if selection.selectedVariant == pvCanonical:
     return CanonicalSystemPrompt
-  let
-    mechanics = CanonicalSystemPrompt.find("Coordinates are units")
-    visibility = CanonicalSystemPrompt.find("YOU CAN SEE THE WHOLE SCREEN")
-    cadence = CanonicalSystemPrompt.find("Every 5 seconds you set")
-    schema = CanonicalSystemPrompt.find("Reply with a single JSON object")
-  doAssert mechanics >= 0 and visibility > mechanics and cadence > visibility and schema > cadence
-  Templates[ord(selection.selectedVariant) - 1] % [
-    CanonicalSystemPrompt[mechanics ..< visibility], CanonicalSystemPrompt[cadence ..< schema],
-    CanonicalSystemPrompt[schema .. ^1]]
-
-proc promptRecord*(selection: PromptSelection, system, user, kind: string,
-                   turn, seat: int): JsonNode =
-  %*{"schema": "atari-cabinet.prompt-provenance.v1", "kind": kind,
-    "turn": turn, "seat": seat,
-    "prompt_template": selection.promptMetadata(system, user),
-    "messages": [{"role": "system", "content": system},
-                 {"role": "user", "content": user}]}
+  Templates[ord(selection.selectedVariant) - 1] % [Mechanics, OutputFormat]

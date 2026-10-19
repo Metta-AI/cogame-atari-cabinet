@@ -196,22 +196,9 @@ It excludes seeds, seat permutations, hidden policies, future serves, and infere
 The teacher emits the six numeric action fields; its stance parameters match the native bulwark baseline.
 The game validates the decoded complete order through the existing ordinary action path.
 
-## Private rules context
+## Prompt selection
 
-Each `atari-cabinet.player.v2` decision also carries `system` and
-`prompt_template`: bank `atari-cabinet-rules-v1`, requested selection, resolved
-variant, independent seed, and exact SHA-256 hashes of system/user text. The
-server user text is the private seat view without player-owned operator guidance.
-All seats use the same episode selection. This metadata is outside the view.
-
-Ordinary players return `prompt_evidence` beside `action`, containing the same
-selection, turn, seat, exact messages/hashes, context kind, and player fallback
-flag. The game validates selection, hashes, turn, and seat before accepting the
-orders. These remain player reports, not authenticated model-generation evidence.
-Numeric players continue submitting ordinary actions without language evidence.
-
-`COGAME_SAVE_TRAJECTORY_URI` receives private `atari-cabinet.prompt-provenance.v1`
-JSONL: `server_decision_context` records, `player_report` envelopes, and an
-`episode_summary` with source revision, game seed, ROM, selection, and results.
-The original public replay format and game version remain unchanged. Operator
-instructions never enter public replay or results; `say` remains spectator-only.
+Game config accepts promptVariant and an independent promptSeed. Each private
+decision includes the selected system prompt. The ordinary player combines it
+with its operator guidance locally. Selection stays fixed throughout the game,
+outside simulation randomness and replay state. No player evidence report is required.

@@ -470,7 +470,6 @@ proc runServerLoop*(
     liveSpeedIndex = 0
     commands = newSeq[uint8](CabinetCount)
     turnsRun = 0
-  engine.promptSelection = selection
   for seat in 0 ..< CabinetCount:
     commands[seat] = NeutralCommand
 
@@ -661,15 +660,11 @@ proc runServerLoop*(
               continue
             waiting[seat] = true
             connected[seat] = true
-            let system = selection.systemPrompt()
-            let view = engine.seatViewJson(game, seat, turnIndex)
-            engine.promptRecords.add(selection.promptRecord(system, view,
-              "server_decision_context", turnIndex, seat))
             let decision = %*{
               "type": "decision", "protocol": "atari-cabinet.player.v2",
               "turn": turnIndex, "deadline_ms": config.turnBudgetMs,
-              "view": parseJson(view), "system": system,
-              "prompt_template": selection.promptMetadata(system, view)
+              "view": parseJson(engine.seatViewJson(game, seat, turnIndex)),
+              "system": selection.systemPrompt()
             }
             websocket.send($decision, TextMessage)
           while waiting.contains(true) and
@@ -836,15 +831,6 @@ proc runServerLoop*(
           " events)"
       if runtimeConfig.resultsUri.len > 0:
         runtimeConfig.writeResults(game.playerResultsJson() & "\n")
-      var privateLines = ""
-      for record in engine.promptRecords:
-        privateLines.add($record & "\n")
-      privateLines.add($( %*{"schema": "atari-cabinet.prompt-provenance.v1",
-        "kind": "episode_summary", "source_revision": getEnv("COWORLD_SOURCE_REVISION"),
-        "game_seed": config.seed, "rom": config.rom,
-        "prompt_template": selection.promptMetadata(selection.systemPrompt(), ""),
-        "results": parseJson(game.playerResultsJson())}) & "\n")
-      writeCogameEnv("COGAME_SAVE_TRAJECTORY_URI", privateLines, "application/x-ndjson")
       if metricsPath.len > 0:
         writeFile(metricsPath, $(%*{
           "ticks": game.tickCount,

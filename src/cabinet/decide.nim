@@ -1,6 +1,6 @@
 ## General seat observations, order validation, and bounded game fallback.
 import std/json
-import sim, stances, baselines, control, prompts
+import sim, stances, baselines, control
 
 type
   SeatPolicy* = object
@@ -15,8 +15,6 @@ type
     stances*: seq[CabinetStance]
     haveStance*: seq[bool]
     params*: BaselineParams
-    promptSelection*: PromptSelection
-    promptRecords*: seq[JsonNode]
 
 proc initDecisionEngine*(sim: SimServer): DecisionEngine =
   result.seats = newSeq[SeatPolicy](CabinetCount)
@@ -324,28 +322,6 @@ proc acceptOrders*(
     var stance = parseCabinetStance(
       node["action"], sim.cabinetOfSeat(seat), cabinetOut, live,
       sim.config.catchEnabled, engine.stances[seat], engine.haveStance[seat])
-    if node.hasKey("prompt_evidence"):
-      # A player report establishes intent, not authenticated generation.
-      let evidence = node["prompt_evidence"]
-      if evidence.kind != JObject or not evidence.hasKey("messages"):
-        raise newException(ValueError, "player prompt evidence must contain messages")
-      let messages = evidence["messages"]
-      if messages.kind != JArray or messages.len != 2:
-        raise newException(ValueError, "player prompt evidence requires two messages")
-      for index, role in ["system", "user"]:
-        if messages[index].kind != JObject or
-            messages[index]{"role"}.getStr() != role or
-            not messages[index].hasKey("content") or
-            messages[index]["content"].kind != JString:
-          raise newException(ValueError, "invalid player prompt message")
-      if evidence["turn"].getInt() != turnIndex or
-          evidence["seat"].getInt() != seat or
-          messages[0]["content"].getStr() != engine.promptSelection.systemPrompt() or
-          evidence["prompt_template"] != engine.promptSelection.promptMetadata(
-            messages[0]["content"].getStr(), messages[1]["content"].getStr()):
-        return false
-      engine.promptRecords.add(%*{"schema": "atari-cabinet.prompt-provenance.v1",
-        "kind": "player_report", "turn": turnIndex, "seat": seat, "report": evidence})
     stance.source = ssExternal
     engine.repairStance(sim, seat, stance)
     engine.stances[seat] = stance
