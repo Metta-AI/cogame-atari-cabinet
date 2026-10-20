@@ -6,7 +6,7 @@ import bitworld/client as bitworldClient
 import bitworld/[runtime, spriteprotocol]
 import mummy
 import sim, global, replays, broadcast, replay_runtime, events, wire_constants
-import stances, baselines, control, decide
+import stances, baselines, control, decide, prompts
 
 when defined(posix):
   from std/posix import SHUT_RDWR, shutdown
@@ -384,7 +384,8 @@ proc runServerLoop*(
   initialConfig = defaultGameConfig(),
   saveReplayPath = "",
   loadReplayPath = "",
-  runtimeConfig = RuntimeConfig()
+  runtimeConfig = RuntimeConfig(),
+  selection = PromptSelection()
 ) =
   initAppState()
   if saveReplayPath.len > 0 and loadReplayPath.len > 0:
@@ -662,7 +663,8 @@ proc runServerLoop*(
             let decision = %*{
               "type": "decision", "protocol": "atari-cabinet.player.v2",
               "turn": turnIndex, "deadline_ms": config.turnBudgetMs,
-              "view": parseJson(engine.seatViewJson(game, seat, turnIndex))
+              "view": parseJson(engine.seatViewJson(game, seat, turnIndex)),
+              "system": selection.systemPrompt()
             }
             websocket.send($decision, TextMessage)
           while waiting.contains(true) and

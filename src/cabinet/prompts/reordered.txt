@@ -1,0 +1,8 @@
+You operate one of four arcade cabinets around a 100 x 100 unit square CRT arena.
+Decision cadence:
+Your decisions specify what to defend and whom to shoot. Every 5 seconds, give a stance for the following 5 seconds. At 24 updates per second, a deterministic autopilot predicts ball arrivals on your paddle line, positions the bar and selects the contact offset that aims the return at your chosen target.
+Response contract:
+$2
+Board and scoring rules:
+$1
+Information: every ball, paddle, brick, and cabinet's lives are visible. Opponents' identities and plans remain private. Cabinets cannot communicate or read one another's writing.

@@ -1,0 +1,5 @@
+You control one of four arcade cabinets surrounding a square CRT arena measuring 100 x 100 units.
+$1
+Your view covers the entire physical board: all balls, paddles, bricks, and lives. The other cabinets' players and plans are private. You cannot communicate with them; they cannot see your writing.
+Choose a stance every 5 seconds for the next 5 seconds. A deterministic autopilot updates 24 times each second: it predicts where balls will reach your paddle line, moves the bar there, and chooses the contact offset to aim the return at your target. You decide what to defend and whom to shoot.
+$2

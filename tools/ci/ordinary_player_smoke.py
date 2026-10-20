@@ -76,6 +76,7 @@ with socket.socket() as reserved:
     reserved.bind(('127.0.0.1', 0))
     port = reserved.getsockname()[1]
 config = {'seed': 7, 'rom': 'warlords', 'num_agents': 4, 'minPlayers': 4,
+          'promptVariant': 'mixed', 'promptSeed': 4,
           'maxTicks': 240, 'turnTicks': 24, 'turnBudgetMs': 2000, 'fastMode': True,
           'startWaitTicks': 1, 'gameOverTicks': 1, 'lobbyJoinTimeoutTicks': 240,
           'wallClockBudgetSeconds': 90, 'players': [{'name': f'P{i+1}'} for i in range(4)],
@@ -147,6 +148,7 @@ try:
         assert len(requests) == 20 and len(selected) == 20, (len(requests), len(selected))
     elif args.mode in ('mixed', 'sidecar'):
         assert len(requests) == 20 and len(selected) == 20, (len(requests), len(selected))
+        assert all(request['system'].startswith('You operate one of four arcade cabinets') for request in requests)
     elif args.mode == 'no-credentials':
         assert len(requests) == 0 and len(selected) == 0
     assert 'cabinet llm:' not in (args.output / 'game.log').read_text()

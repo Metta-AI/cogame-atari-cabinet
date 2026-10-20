@@ -1,0 +1,8 @@
+Cabinet briefing: you occupy one of four arcade cabinets around a square CRT arena spanning 100 x 100 units.
+The screen reveals all physical play: every ball, paddle, brick, and cabinet's lives. It does not reveal the other players or their plans. You cannot communicate with other cabinets, and they cannot read what you write.
+The following rules govern the board and score.
+$1
+Control briefing
+The policy supplies a stance at 5-second intervals, each covering the next 5 seconds. A deterministic controller works at 24 updates per second. It forecasts where each ball meets the paddle line, brings the bar there and sets the impact offset for the requested return direction. Select what needs defending and which rival to shoot.
+Use this response format.
+$2

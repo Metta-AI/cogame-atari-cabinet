@@ -4,7 +4,7 @@ import std/[httpclient, json, options, os, strutils, uri]
 import bitworld/spriteprotocol
 import whisky
 import curly
-import cabinet/[sim_types, stances, baselines, player_baselines, player_llm, numeric_codec]
+import cabinet/[sim_types, stances, baselines, player_baselines, player_llm, numeric_codec, prompts]
 
 const
   ConnectAttempts = 240      ## 240 x 500 ms = 2 minutes of dialling.
@@ -94,7 +94,7 @@ when isMainModule:
         client.throttled = false
         # The player performs inference. All seats run concurrently in their
         # own containers; the game owns their shared response deadline.
-        let request = client.requestFor(SystemPrompt, userMessage(prompt, $view), seat)
+        let request = client.requestFor(decision["system"].getStr(), userMessage(prompt, $view), seat)
         var batch: RequestBatch
         batch.post(request.url, request.headers, request.body, "player")
         let responses = client.curl.makeRequests(batch,

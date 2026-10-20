@@ -115,6 +115,12 @@ jobs:
       - name: Exercise training bridge across all ROMs
         run: python3 tests/test_training_bridge.py
 
+      - name: Complete matched prompt games
+        run: |
+          python3 -m pip install websockets==15.0.1
+          nim c -d:release --parallelBuild:1 --path:src -o:/tmp/cabinet-bridge src/cabinet/training_bridge.nim
+          python3 tools/test_prompt_variants.py /tmp/cabinet-bridge
+
       - name: Run tests
         # Every tests/*.nim runs twice: debug (range/overflow checks, stack
         # traces) and -d:release (release-only compile errors and codegen bugs

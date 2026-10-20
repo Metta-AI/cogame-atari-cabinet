@@ -195,3 +195,10 @@ The observation encodes public board state, private own stance, ROM rules, and b
 It excludes seeds, seat permutations, hidden policies, future serves, and inference settings.
 The teacher emits the six numeric action fields; its stance parameters match the native bulwark baseline.
 The game validates the decoded complete order through the existing ordinary action path.
+
+## Prompt selection
+
+Game config accepts promptVariant and an independent promptSeed. Each private
+decision includes the selected system prompt. The ordinary player combines it
+with its operator guidance locally. Selection stays fixed throughout the game,
+outside simulation randomness and replay state. No player evidence report is required.
