@@ -3,7 +3,6 @@ Output specification
 $2
 Physical rules and score
 $1
-Decision timing
 Control reference
 Stance interval: 5 seconds. Stance duration: 5 seconds. Autopilot: deterministic, 24 updates per second. Responsibilities: forecast ball intersections with the paddle line, position the bar and choose the contact offset for the intended return. Your responsibilities: choose what to defend and whom to shoot.
 Visibility reference: the entire physical screen is visible, including all balls, paddles, bricks, and lives. Other players' identities and intentions are not visible. No cabinet can talk to another or read its writing.

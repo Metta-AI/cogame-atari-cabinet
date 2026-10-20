@@ -4,8 +4,7 @@ How does the game work and score?
 $1
 What can you see or communicate?
 You see every ball, paddle, brick, and cabinet's lives on the whole screen. You do not see who operates the other cabinets or their plans. You cannot talk to them, and no other cabinet sees your writing.
-When do you decide?
-How do you control the paddle?
+When and how do you control the paddle?
 Set a stance every 5 seconds for the next 5 seconds. A deterministic autopilot executes 24 updates per second, predicting ball arrivals at your paddle line, moving the bar and choosing the contact offset to aim the return where instructed. You choose the defense objective and the opponent to shoot.
 How must you respond?
 $2

@@ -44,7 +44,7 @@ runs its deterministic autopilot at 24 Hz.
 ## What scores
 
 ```
-lives you still have at the end   20.00 each (normalised by startingLives — the big one)
+lives you still have at the end   60 / startingLives each (the big one)
 winning                           15.00
 each rival life you take          2.00   (credited to whoever touched the ball last)
 each rival brick your ball breaks 0.50   (never your own wall)
@@ -52,11 +52,12 @@ each ball your paddle deflects    0.25
 ```
 
 Nothing is ever subtracted, so the floor is `0.000`. **Lives dominate.** A
-cabinet that trades a life for two knockouts has lost 20 to gain 4.
+life is worth 20 points in `warlords` and `foozpong`, or 12 in `quadrapong`.
+Trading one life for two knockouts gives up 12 or 20 points to gain 4.
 
 ## Practical advice
 
-1. **Defend first, aim second.** A missed aim costs 20 points; a boring return
+1. **Defend first, aim second.** A missed aim costs a life (12 or 20 points); a boring return
    costs nothing. Only aim when the ball is far enough out that the bar has
    time to be in the right place.
 2. **Shoot the wounded.** A rival on one life is two points and one fewer gun

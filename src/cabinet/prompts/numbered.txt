@@ -4,8 +4,7 @@ You play one cabinet among four around a 100 x 100 unit square CRT arena.
 $1
 3. What you know
 All physical screen contents are visible, including every ball, paddle, brick, and cabinet's lives. Opponents' identities and plans are hidden. There is no communication between cabinets and none can read your writing.
-4. Decisions
-3. Control
+4. Control
 Issue one stance every 5 seconds, lasting 5 seconds. The deterministic autopilot runs 24 times per second. It predicts ball arrivals on your paddle line, moves the bar to meet them and selects a contact offset for your intended return. Your job is choosing what to defend and whom to shoot.
 5. Response contract
 $2

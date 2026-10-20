@@ -17,7 +17,8 @@ and six action heads of sizes 5, 4, 5, 87, 49, and 256. Append `--language`
 after the ROM for text training with the full hosted rules and full stance.
 Use a timestep limit for every reinforcement-learning run.
 
-From a Metta checkout, use the public collector and exporter to build a matched
+From a `Metta-AI/posttraining-research` checkout, use the public collector and
+exporter to build a matched
 teacher corpus. Run from a clean, committed game checkout and retain the private
 trajectory alongside the exported examples:
 
