@@ -125,9 +125,7 @@ when isMainModule:
           stance.source = ssFallback
           source = "fallback"
           evidence.rejectionReason = some(error.msg)
-    var action = stance.stanceRecordNode(decision["turn"].getInt(), 0, cabinet)
-    for field in ["k", "turn", "seat", "alias", "cabinet", "source", "latency_ms", "post_milli", "aggression_255"]:
-      action.delete(field)
+    let action = stance.stanceActionNode()
     $(%*{"type": "orders", "turn": decision["turn"], "action": action,
       "source": source, "training_attempt": attemptEvidenceJson(evidence)})
 

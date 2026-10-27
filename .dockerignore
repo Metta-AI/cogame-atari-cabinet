@@ -7,3 +7,9 @@ tmp
 build
 replay-viewer/dist
 *.tmp
+
+# Private runtime proof and trajectory evidence.
+dist/
+training-corpus/
+private-trajectories/
+posttrain-output/

@@ -708,6 +708,25 @@ proc runServerLoop*(
                     receipt.rawResponse = %text
                   playerFallback[seat] = accepted and envelope{"source"}.getStr() == "fallback"
                   receipt.accepted = accepted and not playerFallback[seat]
+                  if receipt.origin == aoModel and receipt.accepted:
+                    try:
+                      var cabinetOut: array[CabinetCount, bool]
+                      for cabinet in 0 ..< CabinetCount:
+                        cabinetOut[cabinet] = game.cabinets[cabinet].isOut
+                      var live: seq[bool]
+                      for ball in game.balls: live.add(ball.state == bsLive)
+                      let nativeText = nativeReplyText(receipt.rawResponse.getStr())
+                      let parsed = parseCabinetStance(extractJsonObject(nativeText),
+                        game.cabinetOfSeat(seat), cabinetOut, live,
+                        game.config.catchEnabled, defaultStance(), false)
+                      receipt.response = %nativeText
+                      receipt.parsedAction = parsed.stanceActionNode()
+                      if receipt.parsedAction != engine.stances[seat].stanceActionNode():
+                        receipt.accepted = false
+                        receipt.rejectionReason = some("native response proposal differs from installed action")
+                    except CatchableError as error:
+                      receipt.accepted = false
+                      receipt.rejectionReason = some("native response cannot establish action: " & error.msg)
                   if receipt.accepted: selected[seat] = some(receipt.attemptId)
                   elif receipt.rejectionReason.isNone:
                     receipt.rejectionReason = some("invalid orders or player fallback")
@@ -747,10 +766,11 @@ proc runServerLoop*(
             replayWriter.writeChat(tickTime(game.tickCount), seat, record)
             game.applyStanceRecord(record)
             if not trajectory.isNil:
-              let action = parseJson(record)
+              let action = stance.stanceActionNode()
               for receipt in attempts[seat].mitems:
-                if receipt.accepted: receipt.parsedAction = action
-              let status = if stance.source == ssFallback or selected[seat].isNone: asFallback else: asAccepted
+                if receipt.accepted and receipt.origin != aoModel: receipt.parsedAction = action
+              let status = if stance.source == ssFallback: asFallback
+                elif selected[seat].isSome: asAccepted else: asRejected
               trajectory.recordDecision($turnIndex & "-" & $seat, $seat,
                 observations[seat], attempts[seat], selected[seat], action, status,
                 fallbackOrigin = (if status == asFallback: some(if playerFallback[seat]: "player_scripted" else: "engine_scripted") else: none(string)))

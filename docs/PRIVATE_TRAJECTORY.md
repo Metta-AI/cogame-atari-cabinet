@@ -37,3 +37,8 @@ timeout. Public results and replay are persisted before private upload.
 Bundled players send private attempt-start and response checkpoints before final
 orders. A disconnect preserves the started attempt with missing response/call
 identity; it never becomes an accepted model demonstration.
+
+The engine independently extracts the model text from the retained native response
+and runs the ordinary stance parser. Model acceptance requires that parsed
+semantic action to equal the installed action. A mismatched external order may
+still play, but its model evidence remains rejected with both actions retained.
