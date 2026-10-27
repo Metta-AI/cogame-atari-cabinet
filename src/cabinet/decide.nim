@@ -322,7 +322,7 @@ proc acceptOrders*(
     var stance = parseCabinetStance(
       node["action"], sim.cabinetOfSeat(seat), cabinetOut, live,
       sim.config.catchEnabled, engine.stances[seat], engine.haveStance[seat])
-    stance.source = ssExternal
+    stance.source = if node{"source"}.getStr() == "fallback": ssFallback else: ssExternal
     engine.repairStance(sim, seat, stance)
     engine.stances[seat] = stance
     engine.haveStance[seat] = true
