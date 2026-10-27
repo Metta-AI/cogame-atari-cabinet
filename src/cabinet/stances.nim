@@ -93,6 +93,17 @@ proc defaultStance*(): CabinetStance =
 #  Tolerant parsing
 # ---------------------------------------------------------------------------
 
+proc nativeReplyText*(body: string): string =
+  ## The text actually received from the native Messages response.
+  let payload = parseJson(body)
+  if payload{"stop_reason"}.getStr() == "refusal":
+    raise newException(StanceError, "anthropic refusal")
+  for contentBlock in payload["content"]:
+    if contentBlock{"type"}.getStr() == "text":
+      result.add(contentBlock{"text"}.getStr())
+  if payload{"stop_reason"}.getStr() == "max_tokens" and '{' notin result:
+    raise newException(StanceError, "reply cut off at max_tokens before any JSON")
+
 proc extractJsonObject*(text: string): JsonNode =
   ## The outermost balanced `{...}` in a model reply, tolerating markdown
   ## fences and any prose the model prefixed or suffixed. Falls back to
@@ -408,3 +419,9 @@ proc boundedStanceRecord*(
     trimmed.note = trimmed.note.truncateRunes(keep)
     trimmed.say = trimmed.say.truncateRunes(max(0, trimmed.say.runeLen - 2))
     result = $trimmed.stanceRecordNode(turn, seat, cabinet)
+
+proc stanceActionNode*(stance: CabinetStance): JsonNode =
+  ## Only policy-controlled semantic fields; runtime/replay metadata stays separate.
+  result = stance.stanceRecordNode(0, 0, 0)
+  for field in ["k", "turn", "seat", "alias", "cabinet", "source", "latency_ms", "post_milli", "aggression_255"]:
+    result.delete(field)

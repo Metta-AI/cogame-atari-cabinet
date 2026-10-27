@@ -1,10 +1,10 @@
 ## Ordinary cabinet player: complete standing orders over private seat views.
 ## PLAYER_PROMPT and inference credentials belong to this process only.
-import std/[httpclient, json, options, os, strutils, uri]
+import std/[httpclient, json, monotimes, options, os, strutils, times, uri]
 import bitworld/spriteprotocol
 import whisky
 import curly
-import cabinet/[sim_types, stances, baselines, player_baselines, player_llm, numeric_codec, prompts]
+import cabinet/[sim_types, stances, baselines, player_baselines, player_llm, numeric_codec, prompts, capture]
 
 const
   ConnectAttempts = 240      ## 240 x 500 ms = 2 minutes of dialling.
@@ -63,6 +63,8 @@ when isMainModule:
   doAssert seat >= 0 and seat < CabinetCount
   let session = getEnv("PLAYER_POLICY_SESSION", "cabinet-" & $getCurrentProcessId())
 
+  var socket: WebSocket
+
   proc orders(decision: JsonNode): string =
     let view = decision["view"]
     if numericUrl.len > 0:
@@ -87,29 +89,45 @@ when isMainModule:
     var live: seq[bool]
     for ball in view["balls"]:
       live.add(ball["state"].getStr() == "live")
+    var evidence = newDecisionAttempt($decision["turn"].getInt() & "-" & $seat, label, aoUnknown)
+    var source = "unknown"
     if prompt.len > 0:
       if client.disabled:
+        source = "fallback"
         stance.source = ssFallback
       else:
         client.throttled = false
         # The player performs inference. All seats run concurrently in their
         # own containers; the game owns their shared response deadline.
-        let request = client.requestFor(decision["system"].getStr(), userMessage(prompt, $view), seat)
+        let system = decision["system"].getStr()
+        let user = userMessage(prompt, $view)
+        let request = client.requestFor(system, user, seat)
+        evidence = requestEvidence(evidence.attemptId, label, system, user, request.body)
+        socket.send($( %*{"type": "attempt_started", "turn": decision["turn"],
+          "training_attempt": attemptEvidenceJson(evidence)}), TextMessage)
+        let started = getMonoTime()
         var batch: RequestBatch
         batch.post(request.url, request.headers, request.body, "player")
         let responses = client.curl.makeRequests(batch,
           max(1, (decision["deadline_ms"].getInt() - 500) div 1000))
+        evidence.latencyMs = some(float((getMonoTime() - started).inMilliseconds))
+        evidence.receivedEvidence(responses[0].response)
+        socket.send($( %*{"type": "attempt_response", "turn": decision["turn"],
+          "training_attempt": attemptEvidenceJson(evidence)}), TextMessage)
         try:
           let text = client.textOf(responses[0].response, responses[0].error, request.url)
+          evidence.response = %text
+          source = "model"
           stance = parseCabinetStance(extractJsonObject(text), cabinet,
             cabinetOut, live, view["rules"]["catch_enabled"].getBool(), stance, false)
         except CatchableError as error:
           echo "cabinet player: provider failed: ", error.msg
           stance.source = ssFallback
-    var action = stance.stanceRecordNode(decision["turn"].getInt(), 0, cabinet)
-    for field in ["k", "turn", "seat", "alias", "cabinet", "source", "latency_ms", "post_milli", "aggression_255"]:
-      action.delete(field)
-    $(%*{"type": "orders", "turn": decision["turn"], "action": action})
+          source = "fallback"
+          evidence.rejectionReason = some(error.msg)
+    let action = stance.stanceActionNode()
+    $(%*{"type": "orders", "turn": decision["turn"], "action": action,
+      "source": source, "training_attempt": attemptEvidenceJson(evidence)})
 
   echo "cabinet player: kind=",
     (if prompt.len > 0: "llm" else: "scripted"),
@@ -130,7 +148,7 @@ when isMainModule:
         sleep(ConnectRetryMs)
     nil
 
-  var socket = dial(ConnectAttempts)
+  socket = dial(ConnectAttempts)
   if socket == nil:
     quit("cabinet player: game never accepted a connection", 1)
   echo "cabinet player: connected"

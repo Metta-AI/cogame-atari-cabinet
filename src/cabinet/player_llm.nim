@@ -177,12 +177,4 @@ proc textOf*(
   if response.code < 200 or response.code >= 300:
     raise newException(LlmError, "anthropic error " & $response.code & ": " &
       response.body.truncateRunes(MaxFallbackDetailRunes))
-  let payload = parseJson(response.body)
-  if payload{"stop_reason"}.getStr() == "refusal":
-    raise newException(LlmError, "anthropic refusal")
-  for contentBlock in payload["content"]:
-    if contentBlock{"type"}.getStr() == "text":
-      result.add(contentBlock{"text"}.getStr())
-  if payload{"stop_reason"}.getStr() == "max_tokens" and '{' notin result:
-    raise newException(LlmError, "reply cut off at max_tokens before any " &
-      "JSON: " & result.truncateRunes(160).replace("\n", " "))
+  result = nativeReplyText(response.body)

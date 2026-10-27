@@ -6,7 +6,7 @@ import bitworld/client as bitworldClient
 import bitworld/[runtime, spriteprotocol]
 import mummy
 import sim, global, replays, broadcast, replay_runtime, events, wire_constants
-import stances, baselines, control, decide, prompts
+import stances, baselines, control, decide, prompts, capture
 
 when defined(posix):
   from std/posix import SHUT_RDWR, shutdown
@@ -457,6 +457,7 @@ proc runServerLoop*(
   httpServer.waitUntilReady()
   echo "atari-cabinet listening on ", host, ":", port
 
+  let trajectory = if replayLoaded: nil else: beginCapture("atari-cabinet", "atari-cabinet-" & $config.seed)
   var
     engine = if replayLoaded: DecisionEngine() else: initDecisionEngine(game)
     seatsSeated = false
@@ -646,11 +647,16 @@ proc runServerLoop*(
             turnIndex != lastTurnKey:
           lastTurnKey = turnIndex
           inc turnsRun
-          var waiting, connected: array[CabinetCount, bool]
+          var waiting, connected, playerFallback: array[CabinetCount, bool]
+          var observations: array[CabinetCount, JsonNode]
+          var attempts: array[CabinetCount, seq[DecisionAttempt]]
+          var selected: array[CabinetCount, Option[string]]
           let started = getMonoTime()
           {.gcsafe.}:
             withLock appState.lock:
               appState.orders.clear()
+          for seat in 0 ..< CabinetCount:
+            observations[seat] = parseJson(engine.seatViewJson(game, seat, turnIndex))
           # Every seat receives the same simulation snapshot before any order
           # is applied. Only its own preceding stance appears in its view.
           for position, websocket in sockets:
@@ -663,7 +669,7 @@ proc runServerLoop*(
             let decision = %*{
               "type": "decision", "protocol": "atari-cabinet.player.v2",
               "turn": turnIndex, "deadline_ms": config.turnBudgetMs,
-              "view": parseJson(engine.seatViewJson(game, seat, turnIndex)),
+              "view": observations[seat],
               "system": selection.systemPrompt()
             }
             websocket.send($decision, TextMessage)
@@ -685,7 +691,59 @@ proc runServerLoop*(
                     pending.add((seat, text))
                   appState.orders.del(websocket)
             for (seat, text) in pending:
-              if waiting[seat] and engine.acceptOrders(game, seat, turnIndex, text):
+              if not waiting[seat]: continue
+              let accepted = engine.acceptOrders(game, seat, turnIndex, text)
+              if not trajectory.isNil:
+                try:
+                  let envelope = parseJson(text)
+                  var receipt = if envelope.hasKey("training_attempt"):
+                    readAttemptEvidence(envelope["training_attempt"])
+                  else: newDecisionAttempt($turnIndex & "-" & $seat & "-" & $attempts[seat].len,
+                    engine.seats[seat].label, aoUnknown)
+                  # Only the engine controls acceptance. Unauthenticated scripted
+                  # labels never confer teacher provenance.
+                  if receipt.origin == aoTeacher: receipt.origin = aoUnknown
+                  receipt.attemptId = $turnIndex & "-" & $seat & "-" & receipt.attemptId
+                  if not envelope.hasKey("training_attempt"):
+                    receipt.rawResponse = %text
+                  playerFallback[seat] = accepted and envelope{"source"}.getStr() == "fallback"
+                  receipt.accepted = accepted and not playerFallback[seat]
+                  if receipt.origin == aoModel and receipt.accepted:
+                    try:
+                      var cabinetOut: array[CabinetCount, bool]
+                      for cabinet in 0 ..< CabinetCount:
+                        cabinetOut[cabinet] = game.cabinets[cabinet].isOut
+                      var live: seq[bool]
+                      for ball in game.balls: live.add(ball.state == bsLive)
+                      let nativeText = nativeReplyText(receipt.rawResponse.getStr())
+                      let parsed = parseCabinetStance(extractJsonObject(nativeText),
+                        game.cabinetOfSeat(seat), cabinetOut, live,
+                        game.config.catchEnabled, defaultStance(), false)
+                      receipt.response = %nativeText
+                      receipt.parsedAction = parsed.stanceActionNode()
+                      if receipt.parsedAction != engine.stances[seat].stanceActionNode():
+                        receipt.accepted = false
+                        receipt.rejectionReason = some("native response proposal differs from installed action")
+                    except CatchableError as error:
+                      receipt.accepted = false
+                      receipt.rejectionReason = some("native response cannot establish action: " & error.msg)
+                  if receipt.accepted: selected[seat] = some(receipt.attemptId)
+                  elif receipt.rejectionReason.isNone:
+                    receipt.rejectionReason = some("invalid orders or player fallback")
+                  var previous = -1
+                  for index, known in attempts[seat]:
+                    if known.attemptId == receipt.attemptId: previous = index
+                  if previous >= 0: attempts[seat][previous] = receipt
+                  else: attempts[seat].add(receipt)
+                except CatchableError as error:
+                  var receipt = newDecisionAttempt($turnIndex & "-" & $seat & "-" & $attempts[seat].len,
+                    engine.seats[seat].label, aoUnknown)
+                  receipt.rawResponse = %text
+                  receipt.accepted = accepted and engine.stances[seat].source != ssFallback
+                  if receipt.accepted: selected[seat] = some(receipt.attemptId)
+                  else: receipt.rejectionReason = some("malformed orders/evidence: " & error.msg)
+                  attempts[seat].add(receipt)
+              if accepted:
                 waiting[seat] = false
                 engine.stances[seat].latencyMs = (getMonoTime() - started).inMilliseconds.int
             if waiting.contains(true):
@@ -707,6 +765,15 @@ proc runServerLoop*(
               stance, turnIndex, seat, game.cabinetOfSeat(seat))
             replayWriter.writeChat(tickTime(game.tickCount), seat, record)
             game.applyStanceRecord(record)
+            if not trajectory.isNil:
+              let action = stance.stanceActionNode()
+              for receipt in attempts[seat].mitems:
+                if receipt.accepted and receipt.origin != aoModel: receipt.parsedAction = action
+              let status = if stance.source == ssFallback: asFallback
+                elif selected[seat].isSome: asAccepted else: asRejected
+              trajectory.recordDecision($turnIndex & "-" & $seat, $seat,
+                observations[seat], attempts[seat], selected[seat], action, status,
+                fallbackOrigin = (if status == asFallback: some(if playerFallback[seat]: "player_scripted" else: "engine_scripted") else: none(string)))
             game.emitEvent(StanceSet, cabinet = game.cabinetOfSeat(seat),
               amount = turnIndex, detail = $stance.stance)
       # Compile ONE byte per cabinet, in CABINET INDEX ORDER, every tick, and
@@ -831,6 +898,7 @@ proc runServerLoop*(
           " events)"
       if runtimeConfig.resultsUri.len > 0:
         runtimeConfig.writeResults(game.playerResultsJson() & "\n")
+      trajectory.finishCapture(parseJson(game.playerResultsJson()))
       if metricsPath.len > 0:
         writeFile(metricsPath, $(%*{
           "ticks": game.tickCount,
