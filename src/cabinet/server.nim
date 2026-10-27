@@ -703,7 +703,7 @@ proc runServerLoop*(
                   # Only the engine controls acceptance. Unauthenticated scripted
                   # labels never confer teacher provenance.
                   if receipt.origin == aoTeacher: receipt.origin = aoUnknown
-                  receipt.attemptId = $turnIndex & "-" & $seat & "-" & $attempts[seat].len
+                  receipt.attemptId = $turnIndex & "-" & $seat & "-" & receipt.attemptId
                   if not envelope.hasKey("training_attempt"):
                     receipt.rawResponse = %text
                   playerFallback[seat] = accepted and envelope{"source"}.getStr() == "fallback"
@@ -711,7 +711,11 @@ proc runServerLoop*(
                   if receipt.accepted: selected[seat] = some(receipt.attemptId)
                   elif receipt.rejectionReason.isNone:
                     receipt.rejectionReason = some("invalid orders or player fallback")
-                  attempts[seat].add(receipt)
+                  var previous = -1
+                  for index, known in attempts[seat]:
+                    if known.attemptId == receipt.attemptId: previous = index
+                  if previous >= 0: attempts[seat][previous] = receipt
+                  else: attempts[seat].add(receipt)
                 except CatchableError as error:
                   var receipt = newDecisionAttempt($turnIndex & "-" & $seat & "-" & $attempts[seat].len,
                     engine.seats[seat].label, aoUnknown)

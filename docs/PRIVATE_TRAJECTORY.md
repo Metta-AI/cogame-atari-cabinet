@@ -33,3 +33,7 @@ the public replay retains the deterministic physical control bytes.
 
 Signed uploads use PUT (or `COGAME_SAVE_TRAJECTORY_METHOD=POST`) with a five-second
 timeout. Public results and replay are persisted before private upload.
+
+Bundled players send private attempt-start and response checkpoints before final
+orders. A disconnect preserves the started attempt with missing response/call
+identity; it never becomes an accepted model demonstration.

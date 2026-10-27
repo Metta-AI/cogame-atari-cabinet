@@ -273,9 +273,13 @@ try:
             for attempt in decision.attempts
             if attempt.origin == "model"
         ]
-        assert len(model) == len(receipts), (len(model), len(receipts))
+        if args.mode != "disconnect":
+            assert len(model) == len(receipts), (len(model), len(receipts))
         by_id = {receipt["call_id"]: receipt for receipt in receipts}
         for attempt in model:
+            if attempt.platform_call_id is None:
+                assert args.mode == "disconnect" and not attempt.accepted
+                continue
             receipt = by_id[str(attempt.platform_call_id)]
             assert (
                 attempt.request == receipt["request"]
@@ -291,6 +295,9 @@ try:
         assert (args.output / "trajectory.jsonl").stat().st_mode & 0o777 == 0o600
         proof["private_decisions"] = len(episode.decisions)
         proof["private_model_attempts"] = len(model)
+        proof["private_interrupted_attempts"] = sum(
+            attempt.platform_call_id is None for attempt in model
+        )
         proof["private_rejected_attempts"] = sum(
             not attempt.accepted for attempt in model
         )

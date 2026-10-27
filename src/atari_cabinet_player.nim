@@ -63,6 +63,8 @@ when isMainModule:
   doAssert seat >= 0 and seat < CabinetCount
   let session = getEnv("PLAYER_POLICY_SESSION", "cabinet-" & $getCurrentProcessId())
 
+  var socket: WebSocket
+
   proc orders(decision: JsonNode): string =
     let view = decision["view"]
     if numericUrl.len > 0:
@@ -101,6 +103,8 @@ when isMainModule:
         let user = userMessage(prompt, $view)
         let request = client.requestFor(system, user, seat)
         evidence = requestEvidence(evidence.attemptId, label, system, user, request.body)
+        socket.send($( %*{"type": "attempt_started", "turn": decision["turn"],
+          "training_attempt": attemptEvidenceJson(evidence)}), TextMessage)
         let started = getMonoTime()
         var batch: RequestBatch
         batch.post(request.url, request.headers, request.body, "player")
@@ -108,6 +112,8 @@ when isMainModule:
           max(1, (decision["deadline_ms"].getInt() - 500) div 1000))
         evidence.latencyMs = some(float((getMonoTime() - started).inMilliseconds))
         evidence.receivedEvidence(responses[0].response)
+        socket.send($( %*{"type": "attempt_response", "turn": decision["turn"],
+          "training_attempt": attemptEvidenceJson(evidence)}), TextMessage)
         try:
           let text = client.textOf(responses[0].response, responses[0].error, request.url)
           evidence.response = %text
@@ -144,7 +150,7 @@ when isMainModule:
         sleep(ConnectRetryMs)
     nil
 
-  var socket = dial(ConnectAttempts)
+  socket = dial(ConnectAttempts)
   if socket == nil:
     quit("cabinet player: game never accepted a connection", 1)
   echo "cabinet player: connected"
