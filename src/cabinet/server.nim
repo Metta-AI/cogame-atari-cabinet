@@ -917,4 +917,8 @@ proc runServerLoop*(
       joinThread(serverThread)
       break
 
-    runFrameLimiter(lastTick, not replayLoaded and config.fastMode, sockets)
+    # Higher slots can connect and acknowledge frames before slot zero joins.
+    # Keep the existing lobby tick budget at wall-clock speed until admission;
+    # pending sockets must not accelerate a missing player's startup deadline.
+    runFrameLimiter(lastTick,
+      not replayLoaded and config.fastMode and game.phase != Lobby, sockets)

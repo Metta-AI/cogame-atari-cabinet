@@ -19,7 +19,14 @@ parser.add_argument("--player", required=True)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument(
     "--mode",
-    choices=["mixed", "no-credentials", "disconnect", "numeric", "sidecar"],
+    choices=[
+        "mixed",
+        "no-credentials",
+        "disconnect",
+        "numeric",
+        "sidecar",
+        "delayed-first",
+    ],
     default="mixed",
 )
 parser.add_argument(
@@ -154,7 +161,11 @@ try:
         [args.game], cwd=repo, env=game_env, stdout=game_log, stderr=subprocess.STDOUT
     )
     processes.append(game)
-    for seat in range(4):
+    for seat in [1, 2, 3, 0] if args.mode == "delayed-first" else range(4):
+        if args.mode == "delayed-first" and seat == 0:
+            # Pending higher slots acknowledge frames before slot zero arrives.
+            # Those acknowledgements must not spend the wall-time lobby budget.
+            time.sleep(3)
         log = (args.output / f"player-{seat}.log").open("w")
         logs.append(log)
         env = dict(
@@ -239,7 +250,7 @@ try:
             len(requests),
             len(selected),
         )
-    elif args.mode in ("mixed", "sidecar"):
+    elif args.mode in ("mixed", "sidecar", "delayed-first"):
         assert len(requests) == 20 and len(selected) == 20, (
             len(requests),
             len(selected),
@@ -302,9 +313,9 @@ try:
             not attempt.accepted for attempt in model
         )
     (args.output / "proof.json").write_text(json.dumps(proof, indent=2))
-    (args.output / "provider_requests.json").write_text(json.dumps(requests, indent=2))
     print(json.dumps(proof))
 finally:
+    (args.output / "provider_requests.json").write_text(json.dumps(requests, indent=2))
     for process in processes:
         if process.poll() is None:
             process.terminate()
