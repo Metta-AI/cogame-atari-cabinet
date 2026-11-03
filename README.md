@@ -121,7 +121,9 @@ the player environment. Optional settings are `PLAYER_MODEL` and
 one game, with a local model stub or explicitly absent credentials. The
 `disconnect` mode terminates one owned player and makes the remaining model
 transport fail. It checks game completion, accepted orders, fallback, results,
-and replay. CI runs all three modes. Stub choices prove routing, not strength.
+and replay. The `delayed-first` mode starts higher slots before delaying slot
+zero, checking that their frame acknowledgements cannot consume the lobby
+budget before admission. Stub choices prove routing, not strength.
 
 ## Episode-stable rules wording
 
