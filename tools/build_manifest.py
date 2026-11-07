@@ -271,7 +271,7 @@ def variant_game_config(variant: dict) -> dict:
 def build() -> dict:
     service = compose_service()
     image = placeholder(service)
-    source_url = "https://github.com/Metta-AI/cogame-%s/tree/main" % SLUG
+    source_url = "https://github.com/softmax-universe/cogame-%s/tree/main" % SLUG
     player_resources = {
         # The bundled-player limits.cpu minimum is "1"; anything lower is a 400
         # at upload (pistonball 0.1.1).
